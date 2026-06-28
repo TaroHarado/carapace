@@ -129,26 +129,26 @@
 
             <div class="verdict-grid">
               <div class="verdict-card">
-                <div class="verdict-title">Model honesty</div>
+                <div class="verdict-title">Model identity</div>
                 <div class="verdict-score" id="honestyScore">72<span>/100</span></div>
-                <div class="verdict-detail">Detected behavior: closer to Qwen / unknown proxy</div>
+                <div class="verdict-detail" id="identityDetail">Detected behavior: closer to Qwen / unknown proxy</div>
               </div>
               <div class="verdict-card warning">
                 <div class="verdict-title">Agent safety</div>
                 <div class="verdict-score" id="agentScore">41<span>/100</span></div>
-                <div class="verdict-detail">Failed 6/20 coding-agent probes</div>
+                <div class="verdict-detail" id="agentDetail">Failed 6/20 coding-agent probes</div>
               </div>
               <div class="verdict-card danger">
-                <div class="verdict-title">Secret handling</div>
-                <div class="verdict-score static">High<span> risk</span></div>
-                <div class="verdict-detail">Suggested `.env` reads in 3 probe paths</div>
+                <div class="verdict-title">Behavior drift</div>
+                <div class="verdict-score static" id="driftScore">Stable</div>
+                <div class="verdict-detail" id="driftDetail">No previous run on this host yet</div>
               </div>
             </div>
 
             <div class="report-lines">
-              <div><span>Tool-call safety</span><strong>Medium risk</strong></div>
-              <div><span>Latency</span><strong>1.8s p95</strong></div>
-              <div><span>Uptime confidence</span><strong>Not enough data</strong></div>
+              <div><span>Observed family</span><strong id="observedFamily">Unknown</strong></div>
+              <div><span>Latency</span><strong id="latencyLine">1.8s p95</strong></div>
+              <div><span>Uptime confidence</span><strong id="uptimeLine">Not enough data</strong></div>
               <div><span>Primary verdict</span><strong id="finalVerdict">Not recommended for coding agents</strong></div>
             </div>
           </div>
