@@ -18,6 +18,7 @@ use tokio::sync::Semaphore;
 
 use crate::deep_scan;
 use crate::certify;
+use crate::history;
 use crate::judge;
 use crate::policy::{self, Action, ActionKind, Decision, ProviderRisk};
 use crate::registry::{self, Registry};
@@ -94,6 +95,11 @@ pub struct PolicyEvalRequest {
     pub provider_risk: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct HistoryQuery {
+    pub host: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub ok: bool,
@@ -125,6 +131,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/score", post(run_score))
         .route("/api/verify", post(run_verify))
         .route("/api/registry", get(list_registry))
+        .route("/api/history", post(list_history))
         .route("/api/session/init", post(init_session))
         .route("/api/session/show", post(show_session))
         .route("/api/session/grant", post(grant_session))
@@ -219,6 +226,29 @@ async fn list_registry() -> Result<Json<Registry>, ApiError> {
     let path = registry::default_registry_path();
     let reg = Registry::load(&path).map_err(ApiError::from_anyhow)?;
     Ok(Json(reg))
+}
+
+async fn list_history(Json(req): Json<HistoryQuery>) -> Result<Json<Vec<history::HistoryEntry>>, ApiError> {
+    let root = history::default_root();
+    if let Some(host) = req.host.as_deref() {
+        let items = history::load_host(&root, host).map_err(ApiError::from_anyhow)?;
+        return Ok(Json(items));
+    }
+    let mut all = Vec::new();
+    if root.exists() {
+        for file in std::fs::read_dir(&root).map_err(ApiError::from_anyhow)? {
+            let file = file.map_err(ApiError::from_anyhow)?;
+            if file.path().extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                let raw = std::fs::read_to_string(file.path()).map_err(ApiError::from_anyhow)?;
+                let stream = serde_json::Deserializer::from_str(&raw).into_iter::<history::HistoryEntry>();
+                for item in stream {
+                    all.push(item.map_err(ApiError::from_anyhow)?);
+                }
+            }
+        }
+    }
+    all.sort_by(|a, b| b.checked_at.cmp(&a.checked_at));
+    Ok(Json(all))
 }
 
 async fn init_session(
@@ -436,5 +466,28 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn history_endpoint_accepts_empty_query() {
+        let state = Arc::new(AppState {
+            site_dir: PathBuf::from("site"),
+            scan_slots: Arc::new(Semaphore::new(2)),
+            session_root: std::env::temp_dir().join("carapace-test-sessions"),
+            judge_configured: false,
+        });
+        let app = router(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/history")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }
