@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Context;
-use axum::extract::{DefaultBodyLimit, State};
+use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::{HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
@@ -139,6 +139,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/", get(index))
         .route("/styles.css", get(styles))
         .route("/app.js", get(app_js))
+        .route("/assets/*path", get(asset))
         .layer(DefaultBodyLimit::max(16 * 1024))
         .with_state(state)
 }
@@ -335,6 +336,26 @@ async fn app_js(State(state): State<Arc<AppState>>) -> Result<Response, ApiError
     static_asset(state.site_dir.join("app.js"), "application/javascript").await
 }
 
+async fn asset(
+    State(state): State<Arc<AppState>>,
+    Path(path): Path<String>,
+) -> Result<Response, ApiError> {
+    if path.contains("..") || path.contains(':') || path.starts_with('/') || path.starts_with('\\') {
+        return Err(ApiError::message("invalid asset path"));
+    }
+
+    let asset_path = state.site_dir.join("assets").join(&path);
+    let content_type = match asset_path.extension().and_then(|e| e.to_str()).unwrap_or("") {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "svg" => "image/svg+xml",
+        "webp" => "image/webp",
+        "ico" => "image/x-icon",
+        _ => "application/octet-stream",
+    };
+    static_asset(asset_path, content_type).await
+}
+
 async fn static_asset(path: PathBuf, content_type: &'static str) -> Result<Response, ApiError> {
     let bytes = tokio::fs::read(&path)
         .await
@@ -466,6 +487,22 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn asset_endpoint_rejects_path_traversal() {
+        let state = Arc::new(AppState {
+            site_dir: PathBuf::from("site"),
+            scan_slots: Arc::new(Semaphore::new(2)),
+            session_root: std::env::temp_dir().join("carapace-test-sessions"),
+            judge_configured: false,
+        });
+        let app = router(state);
+        let response = app
+            .oneshot(Request::builder().uri("/assets/../Cargo.toml").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

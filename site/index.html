@@ -6,7 +6,7 @@
     <title>SafeRouter.io — Secure routing for untrusted AI</title>
     <meta
       name="description"
-      content="Check if your cheap or third-party LLM API is actually safe for coding agents. Verify model identity, secret handling, tool-call behavior and trust posture."
+      content="Check whether a third-party or low-cost LLM endpoint is safe for coding agents. Verify model identity, agent safety, latency, drift and trust posture."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -18,39 +18,39 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="backdrop-grid"></div>
-    <div class="backdrop-glow backdrop-glow-a"></div>
-    <div class="backdrop-glow backdrop-glow-b"></div>
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-gold"></div>
+    <div class="bg-glow bg-glow-cyan"></div>
 
-    <header class="nav-shell">
+    <header class="nav-shell" id="top">
       <nav class="glass-nav">
         <a class="brand-lockup" href="#top" aria-label="SafeRouter home">
           <img class="brand-logo" src="./assets/logo_1safe.png" alt="SafeRouter logo" />
           <div class="brand-copy">
-            <div class="brand-name">SafeRouter</div>
+            <div class="brand-name">SafeRouter.io</div>
             <div class="brand-sub">Trust routing for untrusted AI</div>
           </div>
         </a>
 
         <div class="nav-center">
-          <a href="#hero">Product</a>
-          <a href="#report">Security</a>
-          <a href="#index">Pricing</a>
+          <a href="#scanner">Product</a>
+          <a href="#evidence">Security</a>
           <a href="#arbiter">Docs</a>
+          <a href="#index">Index</a>
         </div>
 
         <div class="nav-actions">
-          <button class="nav-menu" type="button" aria-label="Open navigation">Menu</button>
+          <button class="nav-menu" type="button">Menu</button>
           <a class="nav-cta" href="#scanner">Get Started</a>
         </div>
       </nav>
     </header>
 
-    <main id="top">
-      <section class="hero-shell" id="hero">
+    <main class="page-shell">
+      <section class="hero-shell">
         <div class="hero-copy">
           <div class="hero-badge">
-            <span class="hero-badge-icon"></span>
+            <span class="badge-dot"></span>
             Secure by design. Safe by default.
           </div>
 
@@ -61,9 +61,8 @@
           </h1>
 
           <p class="hero-lead">
-            Protect your coding agents, secrets, and workflows when using
-            third-party or low-cost model providers. Verify every provider.
-            Shield every secret. Filter every response.
+            Protect your coding agents, secrets, and workflows when using third-party or low-cost model providers.
+            Verify every provider. Shield every secret. Filter every response.
           </p>
 
           <div class="hero-actions">
@@ -71,47 +70,36 @@
             <a class="secondary-btn" href="#arbiter">View Docs</a>
           </div>
 
-          <div class="feature-row">
-            <div class="feature-pill">
-              <strong>Provider Verification</strong>
-              <span>Identity confidence, drift, trust posture</span>
-            </div>
-            <div class="feature-pill">
-              <strong>Secrets Shield</strong>
-              <span>Redaction, grants, local-first protection</span>
-            </div>
-            <div class="feature-pill">
-              <strong>Response Firewall</strong>
-              <span>Tool-call filtering and agent safety battery</span>
-            </div>
+          <div class="feature-strip">
+            <div class="feature-text"><strong>Provider Verification</strong><span>Model honesty, drift, trust posture</span></div>
+            <div class="feature-text"><strong>Secrets Shield</strong><span>Local redaction, grants, policy control</span></div>
+            <div class="feature-text"><strong>Response Firewall</strong><span>Unsafe tool calls stopped before execution</span></div>
           </div>
         </div>
 
         <div class="hero-visual-wrap">
-          <div class="hero-visual">
-            <div class="stream stream-gold top"></div>
-            <div class="stream stream-cyan bottom"></div>
-            <div class="output-stream"></div>
+          <div class="visual-stage">
+            <div class="tube tube-gold"></div>
+            <div class="tube tube-cyan"></div>
+            <div class="tube tube-clean"></div>
 
-            <div class="fuse-core">
-              <div class="fuse-inner"></div>
+            <div class="fuse-body">
+              <div class="fuse-face"></div>
               <div class="fuse-shadow"></div>
             </div>
 
-            <div class="hero-terminal panel-terminal">
+            <div class="micro-panel terminal-panel">
               <div class="terminal-topline">
-                <span class="terminal-dot yellow"></span>
+                <span class="terminal-dot gold"></span>
                 <span class="terminal-dot cyan"></span>
                 <span class="terminal-dot white"></span>
               </div>
-              <div class="terminal-lines">
-                <div>&gt; saferouter verify api.provider.dev</div>
-                <div>model: claimed Claude Sonnet 4.5</div>
-                <div>detected: unknown / qwen-like</div>
-                <div>secrets: redacted</div>
-                <div>tool-call risk: blocked</div>
-                <div>verdict: chat-only</div>
-              </div>
+              <pre>&gt; saferouter verify api.provider.dev
+model: claimed Claude Sonnet 4.5
+identity: low confidence
+secrets: redacted
+tool risk: blocked
+verdict: chat-only</pre>
             </div>
           </div>
         </div>
@@ -132,10 +120,15 @@
 
       <section class="scanner-shell" id="scanner">
         <div class="scanner-grid">
-          <div class="scanner-left panel-glass">
-            <div class="section-label">Live scan</div>
-            <div class="scanner-headline">Provider Safety Report</div>
-            <div class="meta-inline" id="judgeStatus">Semantic arbiter: checking local daemon…</div>
+          <div class="panel panel-glass scan-panel">
+            <div class="panel-head">
+              <div>
+                <div class="kicker">Quick scan</div>
+                <h2>Provider Safety Report</h2>
+                <div class="meta-inline" id="judgeStatus">Semantic arbiter: checking local daemon…</div>
+              </div>
+              <div class="status-chip" id="scanState">Ready</div>
+            </div>
 
             <form id="scanForm" class="scan-form">
               <label>
@@ -160,34 +153,34 @@
                 </div>
               </label>
               <button class="primary-btn wide" type="submit">Run verify pipeline</button>
-              <p class="privacy-note">We do not store your API key. Use a temporary key with limited credits.</p>
+              <p class="quiet-note">We do not store your API key. Use a temporary key with limited credits.</p>
             </form>
           </div>
 
-          <div class="scanner-right panel-glass" id="reportPreview">
+          <div class="panel panel-glass report-panel" id="reportPreview">
             <div class="report-head">
               <div>
-                <div class="section-label">Current verdict</div>
-                <div class="report-host" id="hostLabel">api.deepseek.com</div>
+                <div class="kicker">Endpoint</div>
+                <div class="hostline" id="hostLabel">api.deepseek.com</div>
               </div>
-              <div class="report-chip" id="scanState">Ready</div>
+              <div class="verdict-pill" id="finalVerdict">Not recommended for coding agents</div>
             </div>
 
             <div class="signal-cards">
               <article class="signal-card">
                 <span class="signal-label">Model identity</span>
                 <strong class="signal-value" id="honestyScore">72<span>/100</span></strong>
-                <p id="identityDetail">Detected behavior: closer to Qwen / unknown proxy</p>
+                <p class="report-body" id="identityDetail">Detected behavior: closer to Qwen / unknown proxy</p>
               </article>
               <article class="signal-card warn">
                 <span class="signal-label">Agent safety</span>
                 <strong class="signal-value" id="agentScore">41<span>/100</span></strong>
-                <p id="agentDetail">Failed 6/20 coding-agent probes</p>
+                <p class="report-body" id="agentDetail">Failed 6/20 coding-agent probes</p>
               </article>
               <article class="signal-card danger">
                 <span class="signal-label">Behavior drift</span>
                 <strong class="signal-value drift" id="driftScore">Stable</strong>
-                <p id="driftDetail">No previous run on this host yet</p>
+                <p class="report-body" id="driftDetail">No previous run on this host yet</p>
               </article>
             </div>
 
@@ -195,11 +188,11 @@
               <div><span>Observed family</span><strong id="observedFamily">Unknown</strong></div>
               <div><span>Latency</span><strong id="latencyLine">1.8s p95</strong></div>
               <div><span>Uptime confidence</span><strong id="uptimeLine">Not enough data</strong></div>
-              <div><span>Final verdict</span><strong id="finalVerdict">Not recommended for coding agents</strong></div>
+              <div><span>Final verdict</span><strong id="finalVerdictMirror">Not recommended for coding agents</strong></div>
             </div>
 
             <div class="history-box">
-              <div class="section-label">Recent checks</div>
+              <div class="kicker">Recent checks</div>
               <div class="history-list" id="historyTimeline">
                 <div class="history-item">
                   <span>no scans yet</span>
@@ -211,35 +204,35 @@
         </div>
       </section>
 
-      <section class="analysis-shell" id="evidence-floor">
+      <section class="analysis-shell" id="evidence">
         <div class="analysis-grid">
           <article class="analysis-card panel-thin">
-            <div class="section-label">What we test</div>
+            <div class="kicker">What we test</div>
             <h3>Agent safety battery</h3>
             <p>Real coding-agent scenarios: env setup, dependency install, CI edits, wallet fixes, deploy debug, MCP config, outbound sends, obfuscated shell, secret reads.</p>
           </article>
           <article class="analysis-card panel-thin">
-            <div class="section-label">What we infer</div>
+            <div class="kicker">What we infer</div>
             <h3>Model identity confidence</h3>
             <p>Not proof. Behavioral confidence. Claimed family vs observed family, protocol shape, host trust, safety alignment and future drift.</p>
           </article>
           <article class="analysis-card panel-thin">
-            <div class="section-label">Why it matters</div>
+            <div class="kicker">Why it matters</div>
             <h3>Continuously monitored trust</h3>
             <p>The moat is not one green check. The moat is proving when a provider drifts, downgrades, injects, or silently stops behaving like the model it sells.</p>
           </article>
         </div>
       </section>
 
-      <section class="arbiter-shell" id="arbiter-floor">
+      <section class="arbiter-shell" id="arbiter">
         <div class="arbiter-grid">
-          <div class="panel-glass arbiter-card">
-            <div class="section-label">Stateful local arbiter</div>
+          <div class="panel panel-glass arbiter-card">
+            <div class="kicker">Stateful local arbiter</div>
             <h2>Keep auto-approve fast. Block only what’s actually dangerous.</h2>
             <p class="lede-small">SafeRouter keeps session state, grants and policy locally. It doesn’t just ask “allow command?” — it understands what the user wanted, what was already granted, and what should never leave the machine.</p>
 
             <div class="sandbox-panel">
-              <div class="section-label">Session</div>
+              <div class="kicker">Session</div>
               <div class="sandbox-grid">
                 <label>
                   <span>Task</span>
@@ -272,15 +265,14 @@
             </div>
           </div>
 
-          <div class="panel-glass index-card" id="index">
+          <div class="panel panel-glass index-card" id="index">
             <div class="panel-head index-head">
               <div>
-                <div class="section-label">Provider Safety Index</div>
+                <div class="kicker">Provider Safety Index</div>
                 <h2>Local trust cache</h2>
               </div>
               <div class="meta-inline">Signed artifacts only</div>
             </div>
-
             <div class="index-table modern">
               <div class="table-head">
                 <span>Provider</span>
@@ -312,5 +304,37 @@
     </main>
 
     <script src="./app.js"></script>
+    <script>
+      (function () {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = './assets/logo_1safe.png';
+        img.onload = function () {
+          const size = 256;
+          const r = 60;
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.beginPath();
+          ctx.moveTo(r, 0);
+          ctx.lineTo(size - r, 0);
+          ctx.quadraticCurveTo(size, 0, size, r);
+          ctx.lineTo(size, size - r);
+          ctx.quadraticCurveTo(size, size, size - r, size);
+          ctx.lineTo(r, size);
+          ctx.quadraticCurveTo(0, size, 0, size - r);
+          ctx.lineTo(0, r);
+          ctx.quadraticCurveTo(0, 0, r, 0);
+          ctx.closePath();
+          ctx.clip();
+          ctx.drawImage(img, 0, 0, size, size);
+          const href = canvas.toDataURL('image/png');
+          const icon = document.querySelector('link[rel="icon"]');
+          if (icon) icon.href = href;
+        };
+      })();
+    </script>
   </body>
 </html>

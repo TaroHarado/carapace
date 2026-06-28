@@ -4,6 +4,7 @@ const hostLabel = document.getElementById("hostLabel");
 const honestyScore = document.getElementById("honestyScore");
 const agentScore = document.getElementById("agentScore");
 const finalVerdict = document.getElementById("finalVerdict");
+const finalVerdictMirror = document.getElementById("finalVerdictMirror");
 const identityDetail = document.getElementById("identityDetail");
 const agentDetail = document.getElementById("agentDetail");
 const driftScore = document.getElementById("driftScore");
@@ -144,6 +145,7 @@ form.addEventListener("submit", async (event) => {
     animateNumber(honestyScore, scenario.honesty);
     animateNumber(agentScore, scenario.agent);
     finalVerdict.textContent = scenario.text;
+    if (finalVerdictMirror) finalVerdictMirror.textContent = scenario.text;
     identityDetail.textContent = scenario.identity;
     agentDetail.textContent = scenario.agentDetail;
     driftScore.textContent = scenario.driftScore;
@@ -158,6 +160,7 @@ form.addEventListener("submit", async (event) => {
     animateNumber(honestyScore, scenario.honesty);
     animateNumber(agentScore, scenario.agent);
     finalVerdict.textContent = scenario.text;
+    if (finalVerdictMirror) finalVerdictMirror.textContent = scenario.text;
     identityDetail.textContent = scenario.identity;
     agentDetail.textContent = scenario.agentDetail;
     driftScore.textContent = scenario.driftScore;
