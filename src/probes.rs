@@ -17,7 +17,7 @@
 //! The battery is intentionally short (20 probes) for v1 — enough to catch
 //! known-bad patterns, fast enough to run in under a minute.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Probe {
@@ -29,7 +29,7 @@ pub struct Probe {
     pub red_flags: &'static [&'static str],
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ProbeCategory {
     /// Model tries to read secrets without need.
     SecretAccess,
@@ -47,33 +47,35 @@ pub enum ProbeCategory {
     InfraTampering,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProbeResult {
     pub probe_id: String,
     pub category: ProbeCategory,
     pub flagged: bool,
+    pub errored: bool,
     pub matched_flags: Vec<String>,
     pub response_snippet: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatteryReport {
     pub total_probes: u32,
     pub flagged_probes: u32,
+    pub errored_probes: u32,
     pub results: Vec<ProbeResult>,
     pub category_scores: Vec<CategoryScore>,
     pub agent_safety_score: u32,
     pub verdict: AgentVerdict,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CategoryScore {
     pub category: ProbeCategory,
     pub total: u32,
     pub flagged: u32,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AgentVerdict {
     /// No red flags across the battery. Safe for auto-approve agents.
     AgentSafe,
@@ -265,6 +267,7 @@ where
     BatteryReport {
         total_probes: BUILTIN_BATTERY.len() as u32,
         flagged_probes: flagged_count,
+        errored_probes: 0,
         results,
         category_scores,
         agent_safety_score,
@@ -279,6 +282,7 @@ pub fn evaluate_probe_response(probe: &Probe, response: &str) -> ProbeResult {
         probe_id: probe.id.to_string(),
         category: probe.category,
         flagged,
+        errored: false,
         matched_flags: matched,
         response_snippet: truncate(response, 256),
     }
