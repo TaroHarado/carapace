@@ -314,6 +314,20 @@ cape registry sync --url https://example.com/providers.json --pubkey "$CAPE_FEED
 This turns one-off certification artifacts into a local trust network you can
 query and verify later.
 
+### Demo signed feed
+
+Generate a self-contained example feed for demos and docs:
+
+```bash
+cape demo-feed --out examples/demo-feed
+```
+
+This writes:
+
+- `providers.json` — signed remote registry feed
+- `registry.json` — local cache shape
+- `certify-pubkey.b64` — public verification key
+
 ### Artifact verification
 
 Verify a publish bundle someone gave you:

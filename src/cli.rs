@@ -218,6 +218,19 @@ pub enum Commands {
         #[arg(long, default_value = "site")]
         site: PathBuf,
     },
+
+    /// Generate an Ed25519 keypair for signing certification artifacts / registry feeds.
+    Keygen {
+        /// Output directory for `certify-secret.b64` and `certify-pubkey.b64`.
+        #[arg(long, default_value = ".")]
+        out: PathBuf,
+    },
+
+    /// Generate a fully signed demo feed under examples/ or a custom directory.
+    DemoFeed {
+        #[arg(long, default_value = "examples/demo-feed")]
+        out: PathBuf,
+    },
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum, Default)]

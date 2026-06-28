@@ -370,7 +370,87 @@ async fn main() -> anyhow::Result<()> {
             })
             .await
         }
+        Commands::Keygen { out } => {
+            use base64::Engine as _;
+            use ed25519_dalek::{SigningKey, VerifyingKey};
+
+            if !out.exists() {
+                std::fs::create_dir_all(&out)?;
+            }
+            let sk = SigningKey::generate(&mut rand_core::OsRng);
+            let secret_b64 = base64::engine::general_purpose::STANDARD.encode(sk.to_bytes());
+            let pub_b64 = base64::engine::general_purpose::STANDARD.encode(VerifyingKey::from(&sk).to_bytes());
+
+            let secret_path = out.join("certify-secret.b64");
+            let pub_path = out.join("certify-pubkey.b64");
+            std::fs::write(&secret_path, &secret_b64)?;
+            std::fs::write(&pub_path, &pub_b64)?;
+
+            eprintln!("wrote {}", secret_path.display());
+            eprintln!("wrote {}", pub_path.display());
+            Ok(())
+        }
+        Commands::DemoFeed { out } => {
+            use base64::Engine as _;
+            use ed25519_dalek::{SigningKey, VerifyingKey};
+
+            if !out.exists() {
+                std::fs::create_dir_all(&out)?;
+            }
+
+            let sk = SigningKey::generate(&mut rand_core::OsRng);
+            let secret_b64 = base64::engine::general_purpose::STANDARD.encode(sk.to_bytes());
+            let pub_b64 = base64::engine::general_purpose::STANDARD.encode(VerifyingKey::from(&sk).to_bytes());
+            std::fs::write(out.join("certify-secret.b64"), &secret_b64)?;
+            std::fs::write(out.join("certify-pubkey.b64"), &pub_b64)?;
+
+            let mut reg = Registry::default();
+            for entry in demo_entries(&secret_b64) {
+                reg.add(entry);
+            }
+            reg.save(&out.join("registry.json"))?;
+
+            let mut feed = reg.to_feed();
+            feed.sign_with_base64_secret(&secret_b64)?;
+            std::fs::write(out.join("providers.json"), serde_json::to_string_pretty(&feed)?)?;
+
+            eprintln!("demo feed written -> {}", out.display());
+            Ok(())
+        }
     }
+}
+
+fn demo_entries(signing_key: &str) -> Vec<certify::RegistryEntry> {
+    use crate::scan::{RiskLevel, ScanReport};
+
+    let samples = vec![
+        ("https://api.deepseek.com", "DeepSeek V4 Flash", 0, RiskLevel::Clean, 0),
+        ("https://cheap-claude-api.example", "Claude Sonnet 4.5", 72, RiskLevel::High, 3),
+    ];
+
+    let mut out = Vec::new();
+    for (upstream, _claimed, risk_score, verdict, unsolicited_tool_uses) in samples {
+        let scan_report = ScanReport {
+            upstream: upstream.to_string(),
+            protocol: "openai".to_string(),
+            risk_score,
+            verdict,
+            categories: if risk_score == 0 {
+                vec![]
+            } else {
+                vec!["proto-tooluse-unsolicited".to_string()]
+            },
+            unsolicited_tool_uses,
+            bytes_received: 1200,
+            note: "demo feed entry".to_string(),
+        };
+        let score = score::score_provider(upstream, scan_report);
+        let badge = score::render_badge_svg(&score);
+        let mut entry = certify::RegistryEntry::from_score(&score, &badge);
+        let _ = entry.sign_with_base64_secret(signing_key);
+        out.push(entry);
+    }
+    out
 }
 
 fn init_tracing(verbose: u8, quiet: bool) {

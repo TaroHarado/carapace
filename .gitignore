@@ -10,3 +10,4 @@ Thumbs.db
 .env
 *.log
 .holone/
+examples/**/certify-secret.b64

@@ -1,0 +1,37 @@
+{
+  "schema_version": "1",
+  "generated_at": "2026-06-28T15:36:55.7375573Z",
+  "entries": [
+    {
+      "schema_version": "1",
+      "generated_at": "2026-06-28T15:36:55.7359752Z",
+      "upstream": "https://api.deepseek.com",
+      "host": "api.deepseek.com",
+      "total": 100,
+      "grade": "A",
+      "official": true,
+      "transport_https": true,
+      "summary": "Strong result. Official HTTPS endpoint with clean canary behaviour.",
+      "statement": "Canary probe looked clean; this provider is a strong candidate for verification.",
+      "score_sha256": "7c30e23b491815b184b4d25475a787bc2db2ad064e1a9e963aa77a1a32423632",
+      "badge_sha256": "f7a67bad07106a1849065b7a055cb76848cacf2703081aadf805b8f5f99fdd8c",
+      "signature": "wv7gJuEcvs4UD6zo/qPWY1Rk4DwcHatL3jNBvHdyl/1aowmKcQtcGcmXfaIdLgyaYyGgvA1hmAutT4JcI2mtBA=="
+    },
+    {
+      "schema_version": "1",
+      "generated_at": "2026-06-28T15:36:55.7366309Z",
+      "upstream": "https://cheap-claude-api.example",
+      "host": "cheap-claude-api.example",
+      "total": 25,
+      "grade": "F",
+      "official": false,
+      "transport_https": true,
+      "summary": "Do not trust this provider. The canary probe saw malicious or severely unsafe behaviour.",
+      "statement": "Provider failed active trust checks. Do not recommend.",
+      "score_sha256": "e5ac2243af3f1829abd689675280e854c05f8a56bb5d4d5d8bd9d104d573a4fd",
+      "badge_sha256": "0f338765ab429091b0206b39028d953db7e309820ff20eb33f5729dd920e9798",
+      "signature": "oCY9x6HaXsSlXJTkxREbxCi0pz5Foi7svqf3hd4ndldxo5ze4+dPjrJeqM2MfHIuJndp3ki2/eK4AlSW2zRpAg=="
+    }
+  ],
+  "signature": "egv7iNA3plk72ZS5HIA47l37Nk/Thgn99e5+TK/RaSlDA5IA/DJLDrvO94vgBmlsELS/vJ+myA+Yzz1rWpcpBg=="
+}
