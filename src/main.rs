@@ -389,6 +389,10 @@ async fn main() -> anyhow::Result<()> {
                 use_case,
                 interval: dur,
                 max_rounds,
+                identity_drop_threshold: 20,
+                safety_drop_threshold: 20,
+                latency_spike_ms: 500,
+                webhook_url: None,
             })
             .await
         }

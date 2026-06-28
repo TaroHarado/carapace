@@ -236,13 +236,13 @@ async fn list_history(Json(req): Json<HistoryQuery>) -> Result<Json<Vec<history:
     }
     let mut all = Vec::new();
     if root.exists() {
-        for file in std::fs::read_dir(&root).map_err(ApiError::from_anyhow)? {
-            let file = file.map_err(ApiError::from_anyhow)?;
+        for file in std::fs::read_dir(&root).map_err(|e| ApiError::message(&e.to_string()))? {
+            let file = file.map_err(|e| ApiError::message(&e.to_string()))?;
             if file.path().extension().and_then(|e| e.to_str()) == Some("jsonl") {
-                let raw = std::fs::read_to_string(file.path()).map_err(ApiError::from_anyhow)?;
+                let raw = std::fs::read_to_string(file.path()).map_err(|e| ApiError::message(&e.to_string()))?;
                 let stream = serde_json::Deserializer::from_str(&raw).into_iter::<history::HistoryEntry>();
                 for item in stream {
-                    all.push(item.map_err(ApiError::from_anyhow)?);
+                    all.push(item.map_err(|e| ApiError::message(&e.to_string()))?);
                 }
             }
         }
