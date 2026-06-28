@@ -13,10 +13,12 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-/// Carapace feed-signing public key (Ed25519, base64). Hardcoded for v0.6;
-/// the matching private key lives offline. When the cloud feed launches we
-/// publish this PK in the README and pin it via reproducible builds.
-pub const FEED_PUBLIC_KEY_B64: &str = "PLACEHOLDER_REPLACE_AT_FIRST_REAL_RELEASE";
+/// Carapace demo feed-signing public key (Ed25519, base64).
+///
+/// This is intentionally the **demo** verification key shipped with the sample
+/// registry feed under `examples/demo-feed/`. Production feeds should still be
+/// verified with an explicit pubkey (`--pubkey`) or a future rotated trust root.
+pub const FEED_PUBLIC_KEY_B64: &str = "oMx4vjrFO5W4LG7U9/ql5wiDW6CFTUjuIgu7h3p3eAI=";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FeedManifest {
@@ -244,10 +246,9 @@ mod tests {
         let vk = sk.verifying_key();
         assert!(vk.verify(&mf.signing_digest(), &sig).is_ok());
 
-        // The manifest's own verify_signature() would fail here because the
-        // hardcoded FEED_PUBLIC_KEY_B64 is a placeholder — confirm that path
-        // fails cleanly, then test the round-trip path explicitly.
-        assert!(matches!(mf.verify_signature(), Err(VerifyError::MalformedPublicKey)));
+        // The manifest's own verify_signature() uses the built-in demo trust root,
+        // so a freshly generated random keypair should fail with a signature mismatch.
+        assert!(matches!(mf.verify_signature(), Err(VerifyError::SignatureMismatch)));
     }
 
     #[test]

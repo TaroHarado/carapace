@@ -2,13 +2,13 @@
 
 ## Reporting a vulnerability
 
-Email: TBD. Do not open a public issue for security bugs.
+Use GitHub Security Advisories / private reporting. Do not open a public issue for security bugs.
 
 Include:
 1. `cape --version` output.
 2. The upstream the vulnerability was observed against (do **not** include
    credentials).
-3. A minimal reproduction — ideally with `mockevil` (TBD) or any local
+3. A minimal reproduction — ideally with `mockevil` or any local
    stub provider that returns the malicious chunk you used.
 4. The alert line from `carapace.log` if `cape` caught it, or the exact response
    that bypassed detection.

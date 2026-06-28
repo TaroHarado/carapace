@@ -15,7 +15,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use http_body_util::{BodyExt, BodyStream, Full};
+use http_body_util::{BodyExt, BodyStream};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, Uri};
@@ -413,9 +413,4 @@ impl http_body::Body for ReceiveStream {
         hint.set_upper(1024 * 1024);
         hint
     }
-}
-
-#[allow(dead_code)]
-fn _use_stream_marker() -> BodyStream<Full<Bytes>> {
-    unimplemented!()
 }

@@ -395,7 +395,7 @@ cases.
 
 Current automated suite:
 
-- **35 unit tests**
+- **76 unit tests**
 - **2 end-to-end tests**
 
 Notable e2e cases:
