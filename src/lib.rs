@@ -6,6 +6,7 @@
 
 pub mod cli;
 pub mod inspect;
+pub mod mockevil;
 pub mod protocol;
 pub mod proxy;
 pub mod record;

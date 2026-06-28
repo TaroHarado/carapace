@@ -9,7 +9,7 @@ homepage = "https://github.com/bakugan/carapace"
 repository = "https://github.com/bakugan/carapace"
 keywords = ["ai", "security", "llm", "proxy", "prompt-injection"]
 categories = ["command-line-utilities", "network-programming", "cryptography"]
-authors = ["Bakugan"]
+authors = ["TaroHarado"]
 
 [[bin]]
 name = "cape"
@@ -19,11 +19,15 @@ path = "src/main.rs"
 name = "carapace"
 path = "src/lib.rs"
 
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream"] }
+
 [dependencies]
 tokio = { version = "1.41", features = ["full"] }
 hyper = { version = "1.5", features = ["server", "client", "http1", "http2"] }
 hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "http2", "tokio"] }
 http = "1.1"
+http-body = "1.0"
 http-body-util = "0.1"
 bytes = "1.8"
 serde = { version = "1.0", features = ["derive"] }
@@ -39,6 +43,7 @@ time = { version = "0.3", features = ["serde-human-readable", "formatting", "par
 once_cell = "1.20"
 async-stream = "0.3"
 futures-core = "0.3"
+futures-util = "0.3"
 
 [profile.release]
 opt-level = 3
