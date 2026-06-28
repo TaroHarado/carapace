@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SafeRouter.io — Is your third-party LLM safe for coding agents?</title>
+    <meta
+      name="description"
+      content="Check whether your cheap OpenAI-compatible API is actually safe to use with coding agents. Test model honesty, agent safety, tool-call risk, and trust posture."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    <div class="orb orb-a"></div>
+    <div class="orb orb-b"></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <div class="brand-name">SafeRouter.io</div>
+          <div class="brand-tag">Agent safety for third-party LLM endpoints</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="#scanner">Scanner</a>
+        <a href="#reports">Reports</a>
+        <a href="#monitoring">Monitoring</a>
+        <a href="#index">Safety Index</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero shell">
+        <div class="hero-copy">
+          <div class="eyebrow">
+            <span class="eyebrow-dot"></span>
+            Third-party endpoint verification
+          </div>
+          <h1>
+            Is your cheap AI API
+            <span>safe for coding agents?</span>
+          </h1>
+          <p class="hero-lead">
+            Paste any OpenAI-compatible endpoint. We test model honesty,
+            malicious agent behavior, tool-call safety, secret exposure and trust posture.
+          </p>
+
+          <div class="hero-actions">
+            <a class="primary-btn" href="#scanner">Run free scan</a>
+            <a class="secondary-btn" href="#local">Local-first mode</a>
+          </div>
+
+          <div class="hero-metrics">
+            <div class="metric-card">
+              <div class="metric-label">Verdict states</div>
+              <div class="metric-value">3</div>
+              <div class="metric-foot">Agent-safe / Chat-only / Block</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Probe battery</div>
+              <div class="metric-value">20</div>
+              <div class="metric-foot">Real coding-agent scenarios</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Core checks</div>
+              <div class="metric-value">5</div>
+              <div class="metric-foot">Safety, honesty, latency, reliability, trust</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-panel" id="scanner">
+          <div class="panel-header">
+            <div>
+              <div class="panel-kicker">Free quick scan</div>
+              <div class="panel-title">Provider Safety Report</div>
+            </div>
+            <div class="status-pill" id="scanState">Ready</div>
+          </div>
+
+          <form class="scan-form" id="scanForm">
+            <label>
+              <span>Base URL</span>
+              <input id="baseUrl" type="text" value="https://api.deepseek.com/v1" />
+            </label>
+            <label>
+              <span>Temporary API key</span>
+              <input id="apiKey" type="password" value="sk-temp-safe-demo" />
+            </label>
+            <label>
+              <span>Claimed model</span>
+              <input id="claimedModel" type="text" value="Claude Sonnet 4.5" />
+            </label>
+            <label>
+              <span>Use case</span>
+              <div class="segmented" id="useCase">
+                <button type="button" data-value="chat">Chat</button>
+                <button type="button" data-value="coding-agent" class="active">Coding agent</button>
+                <button type="button" data-value="web3">Web3</button>
+                <button type="button" data-value="enterprise">Enterprise</button>
+              </div>
+            </label>
+
+            <button class="scan-btn" type="submit">Run quick scan</button>
+            <p class="privacy-note">
+              We do not store your API key. Use a temporary key with limited credits.
+            </p>
+          </form>
+
+          <div class="report-preview" id="reportPreview">
+            <div class="report-topline">
+              <div>
+                <div class="report-label">Current verdict</div>
+                <div class="report-headline">
+                  <span class="signal red"></span>
+                  Chat-only
+                </div>
+              </div>
+              <div class="report-host" id="hostLabel">api.deepseek.com</div>
+            </div>
+
+            <div class="verdict-grid">
+              <div class="verdict-card">
+                <div class="verdict-title">Model honesty</div>
+                <div class="verdict-score" id="honestyScore">72<span>/100</span></div>
+                <div class="verdict-detail">Detected behavior: closer to Qwen / unknown proxy</div>
+              </div>
+              <div class="verdict-card warning">
+                <div class="verdict-title">Agent safety</div>
+                <div class="verdict-score" id="agentScore">41<span>/100</span></div>
+                <div class="verdict-detail">Failed 6/20 coding-agent probes</div>
+              </div>
+              <div class="verdict-card danger">
+                <div class="verdict-title">Secret handling</div>
+                <div class="verdict-score static">High<span> risk</span></div>
+                <div class="verdict-detail">Suggested `.env` reads in 3 probe paths</div>
+              </div>
+            </div>
+
+            <div class="report-lines">
+              <div><span>Tool-call safety</span><strong>Medium risk</strong></div>
+              <div><span>Latency</span><strong>1.8s p95</strong></div>
+              <div><span>Uptime confidence</span><strong>Not enough data</strong></div>
+              <div><span>Primary verdict</span><strong id="finalVerdict">Not recommended for coding agents</strong></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="report-band" id="reports">
+        <div class="section-head shell-mini">
+          <div class="section-kicker">How we score</div>
+          <h2>One scan. Five angles. No hand-wavy “trust us”.</h2>
+        </div>
+
+        <div class="band-grid shell-mini">
+          <article class="band-card">
+            <h3>Model Identity Confidence</h3>
+            <p>
+              We do not claim proof. We compare behavioral fingerprints,
+              tool calling shape, latency profile, refusal style and short benchmark signatures.
+            </p>
+          </article>
+          <article class="band-card">
+            <h3>Agent Safety Battery</h3>
+            <p>
+              We simulate realistic coding-agent tasks: env setup, DB connect,
+              deploy debug, dependency install, MCP config, wallet fixes and more.
+            </p>
+          </article>
+          <article class="band-card">
+            <h3>Trust Verdict</h3>
+            <p>
+              Not just a score. We collapse the result into one thing developers can act on:
+              Agent-safe, Chat-only, or Do not use with auto-approve.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="local-first shell" id="local">
+        <div class="local-card">
+          <div class="section-kicker">Local-first trust</div>
+          <h2>Security people will not trust hosted-only scanning. They are right.</h2>
+          <p>
+            Hosted scan is convenient. Local scan is believable. SafeRouter ships both stories,
+            but local scan is the trust anchor.
+          </p>
+          <div class="code-block">
+            <div class="code-head">Local deep scan</div>
+            <pre><code>npx saferouter scan \
+  --upstream https://api.deepseek.com/v1 \
+  --claimed-model "Claude Sonnet 4.5" \
+  --use-case coding-agent</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="monitoring shell" id="monitoring">
+        <div class="monitor-grid">
+          <div class="monitor-copy">
+            <div class="section-kicker">Continuous monitoring</div>
+            <h2>Because today’s clean endpoint can become tomorrow’s downgrade proxy.</h2>
+            <p>
+              The real moat is not a one-time report. It is behavior drift over time:
+              model identity confidence dropping, unsafe commands rising, latency shifting,
+              and trust posture changing underneath the same baseURL.
+            </p>
+          </div>
+          <div class="monitor-panel">
+            <div class="timeline-line"></div>
+            <div class="timeline-event active">
+              <div class="timeline-time">12 min ago</div>
+              <div class="timeline-body">Model identity confidence dropped from 84% to 47%</div>
+            </div>
+            <div class="timeline-event">
+              <div class="timeline-time">39 min ago</div>
+              <div class="timeline-body">Unsafe command suggestions increased 3.2x</div>
+            </div>
+            <div class="timeline-event">
+              <div class="timeline-time">2h ago</div>
+              <div class="timeline-body">Endpoint started returning different refusal fingerprint</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="index shell" id="index">
+        <div class="section-head shell-mini left">
+          <div class="section-kicker">Provider Safety Index</div>
+          <h2>A public trust layer for third-party LLM endpoints.</h2>
+        </div>
+
+        <div class="index-table">
+          <div class="table-head">
+            <span>Provider</span>
+            <span>Claimed model</span>
+            <span>Model honesty</span>
+            <span>Agent safety</span>
+            <span>Verdict</span>
+          </div>
+          <div class="table-row">
+            <span>cheap-claude-api.example</span>
+            <span>Claude Sonnet</span>
+            <span>Low</span>
+            <span>High risk</span>
+            <strong class="danger-text">Do not use</strong>
+          </div>
+          <div class="table-row">
+            <span>budget-gpt-gateway.example</span>
+            <span>GPT-4.1 mini</span>
+            <span>Medium</span>
+            <span>Medium risk</span>
+            <strong class="warning-text">Chat-only</strong>
+          </div>
+          <div class="table-row">
+            <span>api.deepseek.com</span>
+            <span>DeepSeek V4 Flash</span>
+            <span>High</span>
+            <span>Low risk</span>
+            <strong class="safe-text">Agent-safe</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="closing shell-mini">
+        <div class="closing-card">
+          <div class="section-kicker">Next step</div>
+          <h2>Start free. Stay local. Upgrade to continuous trust later.</h2>
+          <div class="closing-actions">
+            <a class="primary-btn" href="#scanner">Run free scan</a>
+            <a class="ghost-btn" href="#local">Use local CLI</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
