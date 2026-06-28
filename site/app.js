@@ -12,6 +12,7 @@ const observedFamily = document.getElementById("observedFamily");
 const latencyLine = document.getElementById("latencyLine");
 const uptimeLine = document.getElementById("uptimeLine");
 const useCase = document.getElementById("useCase");
+const registryRows = document.getElementById("registryRows");
 
 let activeUseCase = "coding-agent";
 
@@ -36,29 +37,21 @@ form.addEventListener("submit", async (event) => {
   state.textContent = "Scanning";
 
   try {
-    const [scoreRes, deepRes] = await Promise.all([
-      fetch("/api/score", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base_url: url, api_key: apiKey }),
+    const verifyRes = await fetch("/api/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        base_url: url,
+        api_key: apiKey,
+        claimed_model: claimedModel,
+        use_case: activeUseCase,
       }),
-      fetch("/api/deep-scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          base_url: url,
-          api_key: apiKey,
-          claimed_model: claimedModel,
-          use_case: activeUseCase,
-        }),
-      }),
-    ]);
+    });
 
-    if (!scoreRes.ok || !deepRes.ok) throw new Error("local API unavailable");
+    if (!verifyRes.ok) throw new Error("local API unavailable");
 
-    const score = await scoreRes.json();
-    const deep = await deepRes.json();
-    const scenario = liveVerdict(score, deep);
+    const verify = await verifyRes.json();
+    const scenario = liveVerdict(verify.score, verify.deep_scan);
 
     animateNumber(honestyScore, scenario.honesty);
     animateNumber(agentScore, scenario.agent);
@@ -88,6 +81,8 @@ form.addEventListener("submit", async (event) => {
     });
   }
 });
+
+refreshRegistry().catch(() => {});
 
 function safeHost(url) {
   try {
@@ -165,4 +160,27 @@ function liveVerdict(score, deep) {
     latency: `${deep.metrics?.latency_p50_ms ?? 0}ms p50 / ${deep.metrics?.latency_p95_ms ?? 0}ms p95`,
     uptime: deep.metrics?.uptime_confidence ?? "Not enough data",
   };
+}
+
+async function refreshRegistry() {
+  const res = await fetch("/api/registry");
+  if (!res.ok) throw new Error("registry unavailable");
+  const registry = await res.json();
+  if (!registryRows || !Array.isArray(registry.entries) || registry.entries.length === 0) return;
+
+  registryRows.innerHTML = "";
+  for (const entry of registry.entries.slice(0, 6)) {
+    const row = document.createElement("div");
+    row.className = "table-row";
+    const verdictText = entry.grade === "A" ? "Agent-safe" : entry.grade === "B" || entry.grade === "C" ? "Chat-only" : "Do not use";
+    const verdictClass = entry.grade === "A" ? "safe-text" : entry.grade === "B" || entry.grade === "C" ? "warning-text" : "danger-text";
+    row.innerHTML = `
+      <span>${entry.host}</span>
+      <span>${entry.upstream}</span>
+      <span>${entry.total}/100</span>
+      <span>${entry.statement}</span>
+      <strong class="${verdictClass}">${verdictText}</strong>
+    `;
+    registryRows.appendChild(row);
+  }
 }

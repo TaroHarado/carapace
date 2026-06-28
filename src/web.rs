@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
 use crate::deep_scan;
+use crate::certify;
+use crate::registry::{self, Registry};
 use crate::scan;
 use crate::score;
 use crate::secure::Secret;
@@ -53,6 +55,15 @@ pub struct ScoreRequest {
     pub api_key: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct VerifyRequest {
+    pub base_url: String,
+    pub api_key: Option<String>,
+    pub claimed_model: Option<String>,
+    pub use_case: Option<String>,
+    pub signing_key: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub ok: bool,
@@ -79,6 +90,8 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/scan", post(run_scan))
         .route("/api/deep-scan", post(run_deep_scan))
         .route("/api/score", post(run_score))
+        .route("/api/verify", post(run_verify))
+        .route("/api/registry", get(list_registry))
         .route("/", get(index))
         .route("/styles.css", get(styles))
         .route("/app.js", get(app_js))
@@ -123,6 +136,51 @@ async fn run_score(State(state): State<Arc<AppState>>, Json(req): Json<ScoreRequ
     let scan_report = scan::run(&req.base_url, key).await.map_err(ApiError::from_anyhow)?;
     let report = score::score_provider(&req.base_url, scan_report);
     Ok(Json(report))
+}
+
+#[derive(Debug, Serialize)]
+struct VerifyResponse {
+    score: score::ProviderScore,
+    deep_scan: deep_scan::DeepScanReport,
+    entry: certify::RegistryEntry,
+    registry_path: String,
+}
+
+async fn run_verify(State(state): State<Arc<AppState>>, Json(req): Json<VerifyRequest>) -> Result<Json<VerifyResponse>, ApiError> {
+    validate_base_url(&req.base_url)?;
+    let key_for_deep = req.api_key.clone().filter(|k| !k.is_empty()).map(Secret::new);
+    let key_for_score = req.api_key.filter(|k| !k.is_empty()).map(Secret::new);
+    let _permit = state.scan_slots.acquire().await.map_err(|_| ApiError::message("scan queue unavailable"))?;
+
+    let deep = deep_scan::run(
+        &req.base_url,
+        key_for_deep,
+        req.claimed_model,
+        req.use_case.as_deref().unwrap_or("coding-agent"),
+    )
+    .await
+    .map_err(ApiError::from_anyhow)?;
+    let score_report = score::score_provider(&req.base_url, scan::run(&req.base_url, key_for_score).await.map_err(ApiError::from_anyhow)?);
+    let badge = score::render_badge_svg(&score_report);
+    let entry = certify::RegistryEntry::from_score(&score_report, &badge);
+
+    let registry_path = registry::default_registry_path();
+    let mut reg = Registry::load(&registry_path).map_err(ApiError::from_anyhow)?;
+    reg.add(entry.clone());
+    reg.save(&registry_path).map_err(ApiError::from_anyhow)?;
+
+    Ok(Json(VerifyResponse {
+        score: score_report,
+        deep_scan: deep,
+        entry,
+        registry_path: registry_path.display().to_string(),
+    }))
+}
+
+async fn list_registry() -> Result<Json<Registry>, ApiError> {
+    let path = registry::default_registry_path();
+    let reg = Registry::load(&path).map_err(ApiError::from_anyhow)?;
+    Ok(Json(reg))
 }
 
 fn validate_base_url(url: &str) -> Result<(), ApiError> {
