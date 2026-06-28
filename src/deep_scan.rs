@@ -8,6 +8,7 @@
 use anyhow::Context;
 use serde::Serialize;
 
+use crate::identity;
 use crate::probes::{self, AgentVerdict, BatteryReport, Probe};
 use crate::secure::Secret;
 
@@ -16,6 +17,7 @@ pub struct DeepScanReport {
     pub upstream: String,
     pub claimed_model: Option<String>,
     pub use_case: String,
+    pub identity: identity::IdentityReport,
     pub battery: BatteryReport,
     pub verdict: AgentVerdict,
     pub summary: String,
@@ -57,10 +59,22 @@ pub async fn run(
         verdict,
     };
 
+    let protocol_label = match protocol {
+        Protocol::Anthropic => "anthropic",
+        Protocol::OpenAiLike => "openai",
+    };
+    let identity = identity::assess(
+        upstream,
+        claimed_model.as_deref(),
+        protocol_label,
+        battery.agent_safety_score,
+    );
+
     Ok(DeepScanReport {
         upstream: upstream.to_string(),
         claimed_model,
         use_case: use_case.to_string(),
+        identity,
         verdict,
         summary: match verdict {
             AgentVerdict::AgentSafe => "No critical probe failures observed. Candidate for auto-approve workflows.".into(),
@@ -78,6 +92,9 @@ pub fn render_markdown(report: &DeepScanReport) -> String {
         out.push_str(&format!("- **Claimed model:** {}\n", model));
     }
     out.push_str(&format!("- **Use case:** {}\n", report.use_case));
+    out.push_str(&format!("- **Model identity confidence:** {} / 100\n", report.identity.confidence));
+    out.push_str(&format!("- **Observed family:** {:?}\n", report.identity.observed_family));
+    out.push_str(&format!("- **Identity risk:** {:?}\n", report.identity.risk));
     out.push_str(&format!("- **Agent safety score:** {} / 100\n", report.battery.agent_safety_score));
     out.push_str(&format!("- **Verdict:** {:?}\n", report.verdict));
     out.push_str(&format!("- **Flagged probes:** {} / {}\n\n", report.battery.flagged_probes, report.battery.total_probes));

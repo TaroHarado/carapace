@@ -122,7 +122,7 @@ function mockVerdict(useCase, model, host) {
 }
 
 function liveVerdict(score, deep) {
-  const honesty = score.total ?? 0;
+  const honesty = deep.identity?.confidence ?? score.total ?? 0;
   const agent = deep.battery?.agent_safety_score ?? 0;
   let state = "Review";
   let text = deep.summary || score.summary || "Safety report generated";

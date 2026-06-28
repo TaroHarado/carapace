@@ -11,6 +11,7 @@ pub mod certify;
 pub mod cli;
 pub mod deep_scan;
 pub mod feed;
+pub mod identity;
 pub mod inspect;
 pub mod judge;
 pub mod mockevil;
