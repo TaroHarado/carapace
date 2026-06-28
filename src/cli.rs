@@ -211,6 +211,22 @@ pub enum Commands {
 
         #[arg(long)]
         max_rounds: Option<u32>,
+
+        /// Alert if identity confidence drops by at least this many points.
+        #[arg(long, default_value_t = 20)]
+        identity_drop_threshold: i32,
+
+        /// Alert if agent safety score drops by at least this many points.
+        #[arg(long, default_value_t = 20)]
+        safety_drop_threshold: i32,
+
+        /// Alert if p95 latency increases by at least this many milliseconds.
+        #[arg(long, default_value_t = 500)]
+        latency_spike_ms: i32,
+
+        /// Optional webhook URL for alert delivery.
+        #[arg(long)]
+        webhook_url: Option<String>,
     },
 
     /// Fetch and verify a signed remote threat feed (rules + blocklist + IoCs).

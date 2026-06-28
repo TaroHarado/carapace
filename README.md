@@ -307,10 +307,15 @@ Run repeated deep scans against one provider:
 cape monitor \
   --upstream https://api.deepseek.com \
   --claimed-model "DeepSeek V4 Flash" \
-  --interval 30m
+  --interval 30m \
+  --identity-drop-threshold 20 \
+  --safety-drop-threshold 20 \
+  --latency-spike-ms 500 \
+  --webhook-url https://hooks.example.com/safe-router
 ```
 
 This keeps appending provider history and printing drift deltas as behavior changes.
+If the thresholds are crossed, `cape monitor` emits alerts and can POST them to a webhook.
 
 ### Local trust registry
 
