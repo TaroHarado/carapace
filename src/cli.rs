@@ -219,6 +219,18 @@ pub enum Commands {
         site: PathBuf,
     },
 
+    /// Local session store management.
+    Session {
+        #[command(subcommand)]
+        action: SessionCmd,
+    },
+
+    /// Deterministic local arbiter policy evaluation.
+    Policy {
+        #[command(subcommand)]
+        action: PolicyCmd,
+    },
+
     /// Generate an Ed25519 keypair for signing certification artifacts / registry feeds.
     Keygen {
         /// Output directory for `certify-secret.b64` and `certify-pubkey.b64`.
@@ -230,6 +242,59 @@ pub enum Commands {
     DemoFeed {
         #[arg(long, default_value = "examples/demo-feed")]
         out: PathBuf,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SessionCmd {
+    Init {
+        #[arg(long)]
+        task: String,
+
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+
+    Show {
+        #[arg(long)]
+        session_id: String,
+
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+
+    Grant {
+        #[arg(long)]
+        session_id: String,
+
+        #[arg(long)]
+        name: String,
+
+        #[arg(long, default_value_t = true)]
+        value: bool,
+
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PolicyCmd {
+    Evaluate {
+        #[arg(long)]
+        session_id: String,
+
+        #[arg(long)]
+        action_kind: String,
+
+        #[arg(long)]
+        target: String,
+
+        #[arg(long, default_value = "medium")]
+        provider_risk: String,
+
+        #[arg(long)]
+        root: Option<PathBuf>,
     },
 }
 

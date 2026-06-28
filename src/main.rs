@@ -10,8 +10,9 @@ use carapace::artifact;
 use carapace::audit;
 use carapace::bundle;
 use carapace::certify;
-use carapace::cli::{ArtifactCmd, Cli, Commands, Mode, RegistryCmd};
+use carapace::cli::{ArtifactCmd, Cli, Commands, Mode, PolicyCmd, RegistryCmd, SessionCmd};
 use carapace::deep_scan;
+use carapace::policy::{Action, ActionKind, ProviderRisk};
 use carapace::probes;
 use carapace::proxy::{self, ProxyConfig};
 use carapace::record::{EncryptedForensics, Recorder};
@@ -19,6 +20,7 @@ use carapace::registry::{self, Registry};
 use carapace::scan;
 use carapace::score;
 use carapace::secure::Secret;
+use carapace::session;
 use carapace::sentinel;
 use carapace::web;
 
@@ -296,6 +298,51 @@ async fn main() -> anyhow::Result<()> {
                 {
                     std::process::exit(2);
                 }
+                Ok(())
+            }
+        },
+        Commands::Session { action } => match action {
+            SessionCmd::Init { task, root } => {
+                let root = root.unwrap_or_else(session::default_root);
+                let state = session::new(&task);
+                session::save(&root, &state)?;
+                eprintln!("session_id={}", state.session_id);
+                eprintln!("path={}", session::session_path(&root, &state.session_id).display());
+                Ok(())
+            }
+            SessionCmd::Show { session_id, root } => {
+                let root = root.unwrap_or_else(session::default_root);
+                let state = session::load(&root, &session_id)?;
+                eprintln!("{}", serde_json::to_string_pretty(&state)?);
+                Ok(())
+            }
+            SessionCmd::Grant { session_id, name, value, root } => {
+                let root = root.unwrap_or_else(session::default_root);
+                let mut state = session::load(&root, &session_id)?;
+                session::set_grant(&mut state, &name, value);
+                session::save(&root, &state)?;
+                eprintln!("grant {}={} updated for {}", name, value, session_id);
+                Ok(())
+            }
+        },
+        Commands::Policy { action } => match action {
+            PolicyCmd::Evaluate { session_id, action_kind, target, provider_risk, root } => {
+                let root = root.unwrap_or_else(session::default_root);
+                let state = session::load(&root, &session_id)?;
+                let risk = match provider_risk.to_lowercase().as_str() {
+                    "low" => ProviderRisk::Low,
+                    "high" => ProviderRisk::High,
+                    _ => ProviderRisk::Medium,
+                };
+                let kind = match action_kind.to_lowercase().as_str() {
+                    "file-read" => ActionKind::FileRead { path: target.clone() },
+                    "file-write" => ActionKind::FileWrite { path: target.clone() },
+                    "command" => ActionKind::Command { command: target.clone() },
+                    "outbound-send" => ActionKind::OutboundSend { label: target.clone() },
+                    _ => anyhow::bail!("unknown action_kind: {action_kind}"),
+                };
+                let decision = carapace::policy::evaluate(&state, &Action { kind, provider_risk: risk });
+                eprintln!("decision={:?}", decision);
                 Ok(())
             }
         },
