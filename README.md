@@ -2,10 +2,10 @@
 
 **A local guard against malicious LLM providers — on the wire, not in your client.**
 
-> Work in progress. v0.1.0 ships the inspecting reverse proxy with the safety
-> properties listed below. The four-command surface (`proxy | scan | audit |
-> sentinel`) is wired; `scan`, `audit`, `sentinel` are placeholders until the
-> next milestone.
+> Work in progress. v0.5-dev already ships the inspecting reverse proxy,
+> chunked-bypass-resistant streaming reassembly, real `cape scan` canary probe,
+> and the first threat-feed manifest primitives. `audit` and `sentinel` are
+> still placeholders until the next milestone.
 
 ---
 
@@ -85,11 +85,36 @@ export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
 
 - **v0.1.0** initial skeleton: CLI, inspector skeleton, builtin rules, zeroize key.
 - **v0.2.0** Anthropic + OpenAI real SSE parsing under `ProtocolAdapter` trait.
-- **v0.3.0** (current) Streaming forward + per-tool_use reassembly + e2e chunked-bypass test.
-- **v0.4.0** (next) Real `parse_declared_tools` so legitimate Claude Code/Cursor tool_use doesn't get false-flagged.
-- **v0.5.0** `cape scan` canary probe + signed threat feed updates (proprietary feed, SUM free / detail paid).
-- **v0.6.0** `cape audit` host IoC scanner for known campaigns (Windows/POSIX), `cape sentinel` background monitor.
-- **future** Encrypted forensics recording, multiple-protocol adapters (z.ai paas/v4, DeepSeek), LLM-judge slow-path, MCP gateway.
+- **v0.3.0** Streaming forward + per-tool_use reassembly + e2e chunked-bypass test.
+- **v0.4.0** Real `parse_declared_tools` so legitimate Claude Code/Cursor tool_use doesn't get false-flagged.
+- **v0.5.0** (current) `cape scan` canary probe + threat-feed manifest primitives (rules + blocklist SHA256, signature field reserved for cosign/sigstore).
+- **v0.6.0** Signed remote threat feed (summary free, premium detail/telemetry paid) + `cape audit` host IoC scanner.
+- **v0.7.0** `cape sentinel` background monitor, encrypted forensics recording, multiple-protocol adapters (z.ai paas/v4, DeepSeek), LLM-judge slow-path, MCP gateway.
+
+## `cape scan`
+
+Probe a provider with a harmless, tool-less prompt before you trust it:
+
+```sh
+cape scan --upstream https://api.anthropic.com --key "$ANTHROPIC_API_KEY"
+```
+
+What it does:
+
+- chooses a wire dialect (`anthropic` / `openai-like`) based on the endpoint,
+  then **sniffs the actual response body** to pick the right parser if the
+  provider lies;
+- requests **streaming** to exercise the same SSE path real clients use;
+- runs the response through the same `ProtocolAdapter` + `Inspector` path as
+  the proxy;
+- raises `High`/`Critical` if the provider emits unsolicited `tool_use` or
+  matches known behavioural rules / IoCs.
+
+What it does **not** prove:
+
+- a clean result does **not** rule out passive prompt theft;
+- future behaviour can change after the scan;
+- a provider can behave cleanly on canary prompts and dirty on real ones.
 
 ## License
 

@@ -5,11 +5,13 @@
 //! alerts or blocks. Memory-safe key handling, crash-isolated core.
 
 pub mod cli;
+pub mod feed;
 pub mod inspect;
 pub mod mockevil;
 pub mod protocol;
 pub mod proxy;
 pub mod record;
+pub mod scan;
 pub mod secure;
 pub mod tools;
 

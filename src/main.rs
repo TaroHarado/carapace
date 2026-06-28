@@ -9,6 +9,7 @@ use tracing_subscriber::EnvFilter;
 use carapace::cli::{Cli, Commands, Mode};
 use carapace::proxy::{self, ProxyConfig};
 use carapace::record::Recorder;
+use carapace::scan;
 use carapace::secure::Secret;
 
 #[tokio::main]
@@ -44,8 +45,18 @@ async fn main() -> anyhow::Result<()> {
             proxy::run(cfg).await
         }
         Commands::Scan { upstream, key } => {
-            let _key = key.map(Secret::new);
-            eprintln!("cape scan: probing {upstream} (canary not implemented in v0.1.0)");
+            let key = key.map(Secret::new);
+            let report = scan::run(&upstream, key).await?;
+            eprintln!("risk: {:?} ({})", report.verdict, report.risk_score);
+            if !report.categories.is_empty() {
+                eprintln!("categories: {}", report.categories.join(" "));
+            }
+            eprintln!("protocol: {}", report.protocol);
+            eprintln!("bytes: {}", report.bytes_received);
+            eprintln!("note: {}", report.note);
+            if report.risk_score >= 60 {
+                std::process::exit(2);
+            }
             Ok(())
         }
         Commands::Audit => {
