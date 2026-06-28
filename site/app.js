@@ -13,6 +13,7 @@ const latencyLine = document.getElementById("latencyLine");
 const uptimeLine = document.getElementById("uptimeLine");
 const useCase = document.getElementById("useCase");
 const registryRows = document.getElementById("registryRows");
+const judgeStatus = document.getElementById("judgeStatus");
 const sessionTask = document.getElementById("sessionTask");
 const startSessionBtn = document.getElementById("startSessionBtn");
 const sessionMeta = document.getElementById("sessionMeta");
@@ -169,6 +170,7 @@ form.addEventListener("submit", async (event) => {
 });
 
 refreshRegistry().catch(() => {});
+refreshHealth().catch(() => {});
 
 function safeHost(url) {
   try {
@@ -268,5 +270,20 @@ async function refreshRegistry() {
       <strong class="${verdictClass}">${verdictText}</strong>
     `;
     registryRows.appendChild(row);
+  }
+}
+
+async function refreshHealth() {
+  try {
+    const res = await fetch("/api/health");
+    if (!res.ok) throw new Error();
+    const health = await res.json();
+    if (judgeStatus) {
+      judgeStatus.textContent = `Semantic arbiter: ${health.semantic_arbiter}`;
+    }
+  } catch {
+    if (judgeStatus) {
+      judgeStatus.textContent = "Semantic arbiter: local daemon offline (mock mode)";
+    }
   }
 }

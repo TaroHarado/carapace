@@ -224,6 +224,7 @@ body {
   margin-bottom: 20px;
 }
 .panel-title { margin-top: 6px; font-size: 1.35rem; font-weight: 700; letter-spacing: -0.03em; }
+.panel-subtitle { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .status-pill {
   padding: 8px 12px;
   border-radius: 999px;

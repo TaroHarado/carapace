@@ -18,6 +18,7 @@ use tokio::sync::Semaphore;
 
 use crate::deep_scan;
 use crate::certify;
+use crate::judge;
 use crate::policy::{self, Action, ActionKind, Decision, ProviderRisk};
 use crate::registry::{self, Registry};
 use crate::scan;
@@ -36,6 +37,7 @@ struct AppState {
     site_dir: PathBuf,
     scan_slots: Arc<Semaphore>,
     session_root: PathBuf,
+    judge_configured: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,6 +98,7 @@ pub struct PolicyEvalRequest {
 pub struct HealthResponse {
     pub ok: bool,
     pub version: &'static str,
+    pub semantic_arbiter: &'static str,
 }
 
 pub async fn run(cfg: WebConfig) -> anyhow::Result<()> {
@@ -103,6 +106,7 @@ pub async fn run(cfg: WebConfig) -> anyhow::Result<()> {
         site_dir: cfg.site_dir,
         scan_slots: Arc::new(Semaphore::new(2)),
         session_root: session::default_root(),
+        judge_configured: judge::from_env().is_some(),
     });
 
     let app = router(state);
@@ -132,10 +136,11 @@ fn router(state: Arc<AppState>) -> Router {
         .with_state(state)
 }
 
-async fn health() -> Json<HealthResponse> {
+async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
     Json(HealthResponse {
         ok: true,
         version: crate::VERSION,
+        semantic_arbiter: if state.judge_configured { "configured" } else { "off" },
     })
 }
 
@@ -372,6 +377,7 @@ mod tests {
             site_dir: PathBuf::from("site"),
             scan_slots: Arc::new(Semaphore::new(2)),
             session_root: std::env::temp_dir().join("carapace-test-sessions"),
+            judge_configured: false,
         });
         let app = router(state);
         let response = app
@@ -387,6 +393,7 @@ mod tests {
             site_dir: PathBuf::from("site"),
             scan_slots: Arc::new(Semaphore::new(2)),
             session_root: std::env::temp_dir().join("carapace-test-sessions"),
+            judge_configured: false,
         });
         let app = router(state);
         let body = serde_json::json!({"base_url": "", "api_key": null}).to_string();
@@ -412,6 +419,7 @@ mod tests {
             site_dir: PathBuf::from("site"),
             scan_slots: Arc::new(Semaphore::new(2)),
             session_root: root.clone(),
+            judge_configured: false,
         });
         let app = router(state);
         let body = serde_json::json!({"task": "fix npm build"}).to_string();

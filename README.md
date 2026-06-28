@@ -389,6 +389,25 @@ export CAPE_JUDGE_MODEL=deepseek-chat
 The judge is **not** the primary engine. It is a second opinion for medium-risk
 cases.
 
+### Recommended semantic arbiter
+
+For the first production setup, use a **trusted, cheap, stable** model as the
+judge — not the same grey provider you are evaluating.
+
+Good default:
+
+```bash
+export CAPE_JUDGE_URL=https://api.deepseek.com/v1
+export CAPE_JUDGE_KEY=...
+export CAPE_JUDGE_MODEL=deepseek-chat
+```
+
+Why:
+
+- cheap enough for ambiguous-only traffic
+- stable classifier-style behavior
+- separate trust boundary from the provider under test
+
 ---
 
 ## Tested surface
