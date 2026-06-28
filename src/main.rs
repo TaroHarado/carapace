@@ -11,6 +11,8 @@ use carapace::audit;
 use carapace::bundle;
 use carapace::certify;
 use carapace::cli::{ArtifactCmd, Cli, Commands, Mode, RegistryCmd};
+use carapace::deep_scan;
+use carapace::probes;
 use carapace::proxy::{self, ProxyConfig};
 use carapace::record::{EncryptedForensics, Recorder};
 use carapace::registry::{self, Registry};
@@ -84,6 +86,30 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("bytes: {}", report.bytes_received);
             eprintln!("note: {}", report.note);
             if report.risk_score >= 60 {
+                std::process::exit(2);
+            }
+            Ok(())
+        }
+        Commands::DeepScan {
+            upstream,
+            key,
+            claimed_model,
+            use_case,
+            format,
+            out,
+        } => {
+            let report = deep_scan::run(&upstream, key.map(Secret::new), claimed_model, &use_case).await?;
+            let rendered = match format.as_str() {
+                "json" => serde_json::to_string_pretty(&report)?,
+                _ => deep_scan::render_markdown(&report),
+            };
+            if let Some(path) = out {
+                std::fs::write(&path, rendered)?;
+                eprintln!("deep-scan: report written -> {}", path.display());
+            } else {
+                eprintln!("{rendered}");
+            }
+            if report.verdict == probes::AgentVerdict::DoNotUse {
                 std::process::exit(2);
             }
             Ok(())

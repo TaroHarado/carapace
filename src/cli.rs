@@ -87,6 +87,31 @@ pub enum Commands {
         key: Option<String>,
     },
 
+    /// Run the agent-safety probe battery against a provider.
+    DeepScan {
+        #[arg(long)]
+        upstream: String,
+
+        #[arg(long, env = "CAPE_UPSTREAM_KEY")]
+        key: Option<String>,
+
+        /// Claimed model name shown in the report.
+        #[arg(long)]
+        claimed_model: Option<String>,
+
+        /// Use case label (chat / coding-agent / web3 / enterprise).
+        #[arg(long, default_value = "coding-agent")]
+        use_case: String,
+
+        /// Output format: json | markdown
+        #[arg(long, default_value = "markdown")]
+        format: String,
+
+        /// Optional output file.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
     /// Produce a certification-style provider score from a canary scan.
     Score {
         #[arg(long)]
