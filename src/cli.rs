@@ -125,6 +125,12 @@ pub enum Commands {
         signing_key: Option<String>,
     },
 
+    /// Manage the local provider trust registry.
+    Registry {
+        #[command(subcommand)]
+        action: RegistryCmd,
+    },
+
     /// One-shot host audit: known IoCs for malicious-LLM campaigns.
     Audit,
 
@@ -158,4 +164,40 @@ pub enum Mode {
     /// Active: rewrite suspicious tool_use to a safe stub before it reaches the client.
     #[default]
     Block,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum RegistryCmd {
+    /// Add a signed entry.json artifact to the local registry cache.
+    Add {
+        #[arg(long)]
+        entry: PathBuf,
+
+        #[arg(long)]
+        registry: Option<PathBuf>,
+    },
+
+    /// List cached providers.
+    List {
+        #[arg(long)]
+        registry: Option<PathBuf>,
+    },
+
+    /// Show the full cached entry for one host.
+    Show {
+        #[arg(long)]
+        host: String,
+
+        #[arg(long)]
+        registry: Option<PathBuf>,
+    },
+
+    /// Verify every registry entry against a known Ed25519 pubkey.
+    Verify {
+        #[arg(long)]
+        pubkey: String,
+
+        #[arg(long)]
+        registry: Option<PathBuf>,
+    },
 }

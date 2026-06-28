@@ -8,9 +8,10 @@ use tracing_subscriber::EnvFilter;
 
 use carapace::audit;
 use carapace::certify;
-use carapace::cli::{Cli, Commands, Mode};
+use carapace::cli::{Cli, Commands, Mode, RegistryCmd};
 use carapace::proxy::{self, ProxyConfig};
 use carapace::record::{EncryptedForensics, Recorder};
+use carapace::registry::{self, Registry};
 use carapace::scan;
 use carapace::score;
 use carapace::secure::Secret;
@@ -147,6 +148,61 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(2);
             }
             Ok(())
+        }
+        Commands::Registry { action } => {
+            match action {
+                RegistryCmd::Add { entry, registry: path } => {
+                    let path = path.unwrap_or_else(registry::default_registry_path);
+                    let mut reg = Registry::load(&path)?;
+                    let raw = std::fs::read_to_string(&entry)?;
+                    let artifact: certify::RegistryEntry = serde_json::from_str(&raw)?;
+                    reg.add(artifact);
+                    reg.save(&path)?;
+                    eprintln!("registry: added {} -> {}", entry.display(), path.display());
+                    Ok(())
+                }
+                RegistryCmd::List { registry: path } => {
+                    let path = path.unwrap_or_else(registry::default_registry_path);
+                    let reg = Registry::load(&path)?;
+                    if reg.entries.is_empty() {
+                        eprintln!("registry: empty ({})", path.display());
+                    } else {
+                        for e in reg.list() {
+                            eprintln!("{}  {:?}  {}", e.host, e.grade, e.total);
+                        }
+                    }
+                    Ok(())
+                }
+                RegistryCmd::Show { host, registry: path } => {
+                    let path = path.unwrap_or_else(registry::default_registry_path);
+                    let reg = Registry::load(&path)?;
+                    if let Some(entry) = reg.get_by_host(&host) {
+                        eprintln!("{}", serde_json::to_string_pretty(entry)?);
+                        Ok(())
+                    } else {
+                        anyhow::bail!("registry: host not found: {host}");
+                    }
+                }
+                RegistryCmd::Verify { pubkey, registry: path } => {
+                    let path = path.unwrap_or_else(registry::default_registry_path);
+                    let reg = Registry::load(&path)?;
+                    let results = reg.verify_all(&pubkey);
+                    let mut failed = 0;
+                    for (host, res) in results {
+                        match res {
+                            Ok(()) => eprintln!("OK   {host}"),
+                            Err(e) => {
+                                failed += 1;
+                                eprintln!("FAIL {host} — {e}");
+                            }
+                        }
+                    }
+                    if failed > 0 {
+                        std::process::exit(2);
+                    }
+                    Ok(())
+                }
+            }
         }
         Commands::Audit => {
             let report = audit::run();

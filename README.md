@@ -280,6 +280,20 @@ Outputs:
 - `badge.svg`
 - `entry.json` (optionally signed)
 
+### Local trust registry
+
+Cache certified providers locally:
+
+```bash
+cape registry add --entry ./cert-out/entry.json
+cape registry list
+cape registry show --host api.deepseek.com
+cape registry verify --pubkey "$CAPE_FEED_PUBKEY"
+```
+
+This turns one-off certification artifacts into a local trust network you can
+query and verify later.
+
 ---
 
 ## LLM judge slow-path
@@ -322,6 +336,7 @@ cape proxy
 cape scan
 cape score
 cape certify
+cape registry
 cape audit
 cape sentinel
 cape feed
