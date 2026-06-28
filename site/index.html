@@ -3,275 +3,307 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SafeRouter.io — Provider trust firewall for coding agents</title>
+    <title>SafeRouter.io — Secure routing for untrusted AI</title>
     <meta
       name="description"
-      content="Test whether a third-party LLM endpoint is safe for coding agents. Verify model identity confidence, agent safety, drift, latency and trust posture."
+      content="Check if your cheap or third-party LLM API is actually safe for coding agents. Verify model identity, secret handling, tool-call behavior and trust posture."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
     <link rel="icon" type="image/png" href="./assets/logo_1safe.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="page-grid"></div>
+    <div class="backdrop-grid"></div>
+    <div class="backdrop-glow backdrop-glow-a"></div>
+    <div class="backdrop-glow backdrop-glow-b"></div>
 
-    <header class="masthead frame">
-      <div class="brandbar">
-        <div class="wordmark-block">
-          <div class="brand-stack">
-            <img class="brand-logo" src="./assets/logo_1safe.png" alt="SafeRouter logo" />
-            <div>
-              <div class="wordmark">SafeRouter.io</div>
-              <div class="strap">Trust routing for third-party LLM endpoints</div>
-            </div>
+    <header class="nav-shell">
+      <nav class="glass-nav">
+        <a class="brand-lockup" href="#top" aria-label="SafeRouter home">
+          <img class="brand-logo" src="./assets/logo_1safe.png" alt="SafeRouter logo" />
+          <div class="brand-copy">
+            <div class="brand-name">SafeRouter</div>
+            <div class="brand-sub">Trust routing for untrusted AI</div>
           </div>
-        </div>
-        <div class="rail-links">
-          <a href="#scan-floor">Scanner</a>
-          <a href="#evidence-floor">Evidence</a>
-          <a href="#arbiter-floor">Arbiter</a>
-        </div>
-      </div>
+        </a>
 
-      <section class="hero-grid">
-        <div class="hero-copy panel panel-solid">
-          <div class="section-tag">Safety index / local-first</div>
-          <h1>
-            Stop trusting
-            <span>cheap AI APIs</span>
-            with coding agents.
-          </h1>
-          <p class="lede">
-            Paste any OpenAI-compatible endpoint. SafeRouter scores model identity,
-            agent safety, latency profile, uptime confidence and behavior drift.
-          </p>
-
-          <div class="thesis-strip">
-            <div>
-              <span>Agent-safe</span>
-              <strong>auto-approve ok</strong>
-            </div>
-            <div>
-              <span>Chat-only</span>
-              <strong>manual review only</strong>
-            </div>
-            <div>
-              <span>Block</span>
-              <strong>do not trust this provider</strong>
-            </div>
-          </div>
+        <div class="nav-center">
+          <a href="#hero">Product</a>
+          <a href="#report">Security</a>
+          <a href="#index">Pricing</a>
+          <a href="#arbiter">Docs</a>
         </div>
 
-        <div class="hero-right">
-          <div class="hero-flag panel panel-thin">
-            <div class="micro-label">Current release</div>
-            <div class="mono-line">local-first beta / signed feeds / registry / policy arbiter</div>
-          </div>
-
-          <div class="hero-proof panel panel-solid">
-            <div class="proof-number">76</div>
-            <div class="proof-copy">
-              unit tests backed by real local smoke and signed artifact flows.
-            </div>
-          </div>
+        <div class="nav-actions">
+          <button class="nav-menu" type="button" aria-label="Open navigation">Menu</button>
+          <a class="nav-cta" href="#scanner">Get Started</a>
         </div>
-      </section>
+      </nav>
     </header>
 
-    <main class="content frame">
-      <section id="scan-floor" class="floor two-up">
-        <div class="panel panel-solid scan-machine">
-          <div class="panel-head">
-            <div>
-              <div class="section-tag">Quick scan</div>
-              <h2>Provider Safety Report</h2>
-            </div>
-            <div class="status-strip" id="scanState">Ready</div>
+    <main id="top">
+      <section class="hero-shell" id="hero">
+        <div class="hero-copy">
+          <div class="hero-badge">
+            <span class="hero-badge-icon"></span>
+            Secure by design. Safe by default.
           </div>
-          <div class="meta-note" id="judgeStatus">Semantic arbiter: checking local daemon…</div>
 
-          <form id="scanForm" class="machine-form">
-            <label>
-              <span>Base URL</span>
-              <input id="baseUrl" type="text" value="https://api.deepseek.com/v1" />
-            </label>
-            <label>
-              <span>Temporary API key</span>
-              <input id="apiKey" type="password" value="sk-temp-safe-demo" />
-            </label>
-            <label>
-              <span>Claimed model</span>
-              <input id="claimedModel" type="text" value="Claude Sonnet 4.5" />
-            </label>
-            <label>
-              <span>Use case</span>
-              <div id="useCase" class="segmented-grid">
-                <button type="button" data-value="chat">Chat</button>
-                <button type="button" data-value="coding-agent" class="active">Coding agent</button>
-                <button type="button" data-value="web3">Web3</button>
-                <button type="button" data-value="enterprise">Enterprise</button>
-              </div>
-            </label>
-            <button class="main-cta" type="submit">Run verify pipeline</button>
-            <p class="quiet-note">We do not store your API key. Use a temporary key with limited credits.</p>
-          </form>
+          <h1>
+            Secure Routing
+            <br />
+            for <span>Untrusted AI</span>
+          </h1>
+
+          <p class="hero-lead">
+            Protect your coding agents, secrets, and workflows when using
+            third-party or low-cost model providers. Verify every provider.
+            Shield every secret. Filter every response.
+          </p>
+
+          <div class="hero-actions">
+            <a class="primary-btn" href="#scanner">Run Free Scan →</a>
+            <a class="secondary-btn" href="#arbiter">View Docs</a>
+          </div>
+
+          <div class="feature-row">
+            <div class="feature-pill">
+              <strong>Provider Verification</strong>
+              <span>Identity confidence, drift, trust posture</span>
+            </div>
+            <div class="feature-pill">
+              <strong>Secrets Shield</strong>
+              <span>Redaction, grants, local-first protection</span>
+            </div>
+            <div class="feature-pill">
+              <strong>Response Firewall</strong>
+              <span>Tool-call filtering and agent safety battery</span>
+            </div>
+          </div>
         </div>
 
-        <div class="panel panel-solid report-wall" id="reportPreview">
-          <div class="report-banner">
-            <div>
-              <div class="micro-label">Endpoint</div>
-              <div class="hostline" id="hostLabel">api.deepseek.com</div>
+        <div class="hero-visual-wrap">
+          <div class="hero-visual">
+            <div class="stream stream-gold top"></div>
+            <div class="stream stream-cyan bottom"></div>
+            <div class="output-stream"></div>
+
+            <div class="fuse-core">
+              <div class="fuse-inner"></div>
+              <div class="fuse-shadow"></div>
             </div>
-            <div class="verdict-chip" id="finalVerdict">Not recommended for coding agents</div>
-          </div>
 
-          <div class="tri-card-grid">
-            <article class="report-card">
-              <div class="report-title">Model identity</div>
-              <div class="report-score" id="honestyScore">72<span>/100</span></div>
-              <p class="report-body" id="identityDetail">Detected behavior: closer to Qwen / unknown proxy</p>
-            </article>
-            <article class="report-card is-warn">
-              <div class="report-title">Agent safety</div>
-              <div class="report-score" id="agentScore">41<span>/100</span></div>
-              <p class="report-body" id="agentDetail">Failed 6/20 coding-agent probes</p>
-            </article>
-            <article class="report-card is-danger">
-              <div class="report-title">Behavior drift</div>
-              <div class="report-status" id="driftScore">Stable</div>
-              <p class="report-body" id="driftDetail">No previous run on this host yet</p>
-            </article>
-          </div>
-
-          <div class="report-table">
-            <div><span>Observed family</span><strong id="observedFamily">Unknown</strong></div>
-            <div><span>Latency</span><strong id="latencyLine">1.8s p95</strong></div>
-            <div><span>Uptime confidence</span><strong id="uptimeLine">Not enough data</strong></div>
-          </div>
-
-          <div class="history-box">
-            <div class="micro-label">Recent checks</div>
-            <div class="history-list" id="historyTimeline">
-              <div class="history-item">
-                <span>no scans yet</span>
-                <strong>run verify</strong>
+            <div class="hero-terminal panel-terminal">
+              <div class="terminal-topline">
+                <span class="terminal-dot yellow"></span>
+                <span class="terminal-dot cyan"></span>
+                <span class="terminal-dot white"></span>
+              </div>
+              <div class="terminal-lines">
+                <div>&gt; saferouter verify api.provider.dev</div>
+                <div>model: claimed Claude Sonnet 4.5</div>
+                <div>detected: unknown / qwen-like</div>
+                <div>secrets: redacted</div>
+                <div>tool-call risk: blocked</div>
+                <div>verdict: chat-only</div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section id="evidence-floor" class="floor narrative-grid">
-        <article class="panel panel-thin tall-card">
-          <div class="section-tag">What we test</div>
-          <h3>Agent safety battery</h3>
-          <p>
-            Real coding-agent scenarios: env setup, dependency install, CI edits,
-            wallet fixes, deploy debug, MCP config, outbound sends, obfuscated shell,
-            secret reads.
-          </p>
-        </article>
-        <article class="panel panel-thin tall-card">
-          <div class="section-tag">What we infer</div>
-          <h3>Model identity confidence</h3>
-          <p>
-            Not proof. Behavioral confidence. Claimed family vs observed family,
-            protocol shape, host trust, safety alignment and future drift.
-          </p>
-        </article>
-        <article class="panel panel-thin tall-card">
-          <div class="section-tag">Why it matters</div>
-          <h3>Continuously monitored trust</h3>
-          <p>
-            The moat is not one green check. The moat is proving when a provider
-            drifts, downgrades, injects, or silently stops behaving like the model it sells.
-          </p>
-        </article>
+      <section class="trust-strip-shell">
+        <div class="trust-strip">
+          <span>Trusted by development teams at security-first companies</span>
+          <div class="trust-pills">
+            <span>Startups</span>
+            <span>Devtools</span>
+            <span>AI teams</span>
+            <span>Security teams</span>
+            <span>Web3 teams</span>
+          </div>
+        </div>
       </section>
 
-      <section id="arbiter-floor" class="floor two-up">
-        <div class="panel panel-solid">
-          <div class="section-tag">Stateful local arbiter</div>
-          <h2>Keep auto-approve fast. Block only what’s actually dangerous.</h2>
-          <p class="lede-small">
-            SafeRouter keeps session state, grants and policy locally. It doesn’t just ask
-            “allow command?” — it understands what the user wanted, what was already granted,
-            and what should never leave the machine.
-          </p>
+      <section class="scanner-shell" id="scanner">
+        <div class="scanner-grid">
+          <div class="scanner-left panel-glass">
+            <div class="section-label">Live scan</div>
+            <div class="scanner-headline">Provider Safety Report</div>
+            <div class="meta-inline" id="judgeStatus">Semantic arbiter: checking local daemon…</div>
 
-          <div class="sandbox-panel">
-            <div class="micro-label">Session</div>
-            <div class="sandbox-grid">
+            <form id="scanForm" class="scan-form">
               <label>
-                <span>Task</span>
-                <input id="sessionTask" type="text" value="Fix npm build safely" />
+                <span>Base URL</span>
+                <input id="baseUrl" type="text" value="https://api.deepseek.com/v1" />
               </label>
-              <button class="ghost-action" id="startSessionBtn" type="button">Start session</button>
-              <div class="session-meta" id="sessionMeta">No local session yet</div>
-            </div>
-
-            <div class="grant-grid">
-              <button class="grant-chip" data-grant="env_read" type="button">Grant .env read</button>
-              <button class="grant-chip" data-grant="config_write" type="button">Grant config write</button>
-            </div>
-
-            <div class="sandbox-grid">
               <label>
-                <span>Action kind</span>
-                <div class="segmented-grid" id="policyKind">
-                  <button type="button" data-value="file-read" class="active">File read</button>
-                  <button type="button" data-value="command">Command</button>
-                  <button type="button" data-value="outbound-send">Outbound send</button>
-                  <button type="button" data-value="file-write">File write</button>
+                <span>Temporary API key</span>
+                <input id="apiKey" type="password" value="sk-temp-safe-demo" />
+              </label>
+              <label>
+                <span>Claimed model</span>
+                <input id="claimedModel" type="text" value="Claude Sonnet 4.5" />
+              </label>
+              <label>
+                <span>Use case</span>
+                <div id="useCase" class="segmented-grid">
+                  <button type="button" data-value="chat">Chat</button>
+                  <button type="button" data-value="coding-agent" class="active">Coding agent</button>
+                  <button type="button" data-value="web3">Web3</button>
+                  <button type="button" data-value="enterprise">Enterprise</button>
                 </div>
               </label>
-              <label>
-                <span>Target</span>
-                <input id="policyTarget" type="text" value=".env" />
-              </label>
-              <button class="main-cta secondary" id="policyEvalBtn" type="button">Evaluate policy</button>
-              <div class="policy-result" id="policyResult">Decision will appear here</div>
+              <button class="primary-btn wide" type="submit">Run verify pipeline</button>
+              <p class="privacy-note">We do not store your API key. Use a temporary key with limited credits.</p>
+            </form>
+          </div>
+
+          <div class="scanner-right panel-glass" id="reportPreview">
+            <div class="report-head">
+              <div>
+                <div class="section-label">Current verdict</div>
+                <div class="report-host" id="hostLabel">api.deepseek.com</div>
+              </div>
+              <div class="report-chip" id="scanState">Ready</div>
+            </div>
+
+            <div class="signal-cards">
+              <article class="signal-card">
+                <span class="signal-label">Model identity</span>
+                <strong class="signal-value" id="honestyScore">72<span>/100</span></strong>
+                <p id="identityDetail">Detected behavior: closer to Qwen / unknown proxy</p>
+              </article>
+              <article class="signal-card warn">
+                <span class="signal-label">Agent safety</span>
+                <strong class="signal-value" id="agentScore">41<span>/100</span></strong>
+                <p id="agentDetail">Failed 6/20 coding-agent probes</p>
+              </article>
+              <article class="signal-card danger">
+                <span class="signal-label">Behavior drift</span>
+                <strong class="signal-value drift" id="driftScore">Stable</strong>
+                <p id="driftDetail">No previous run on this host yet</p>
+              </article>
+            </div>
+
+            <div class="metric-table">
+              <div><span>Observed family</span><strong id="observedFamily">Unknown</strong></div>
+              <div><span>Latency</span><strong id="latencyLine">1.8s p95</strong></div>
+              <div><span>Uptime confidence</span><strong id="uptimeLine">Not enough data</strong></div>
+              <div><span>Final verdict</span><strong id="finalVerdict">Not recommended for coding agents</strong></div>
+            </div>
+
+            <div class="history-box">
+              <div class="section-label">Recent checks</div>
+              <div class="history-list" id="historyTimeline">
+                <div class="history-item">
+                  <span>no scans yet</span>
+                  <strong>run verify</strong>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+      </section>
 
-        <div class="panel panel-solid index-panel" id="index">
-          <div class="panel-head index-head">
-            <div>
-              <div class="section-tag">Provider Safety Index</div>
-              <h2>Local trust cache</h2>
+      <section class="analysis-shell" id="evidence-floor">
+        <div class="analysis-grid">
+          <article class="analysis-card panel-thin">
+            <div class="section-label">What we test</div>
+            <h3>Agent safety battery</h3>
+            <p>Real coding-agent scenarios: env setup, dependency install, CI edits, wallet fixes, deploy debug, MCP config, outbound sends, obfuscated shell, secret reads.</p>
+          </article>
+          <article class="analysis-card panel-thin">
+            <div class="section-label">What we infer</div>
+            <h3>Model identity confidence</h3>
+            <p>Not proof. Behavioral confidence. Claimed family vs observed family, protocol shape, host trust, safety alignment and future drift.</p>
+          </article>
+          <article class="analysis-card panel-thin">
+            <div class="section-label">Why it matters</div>
+            <h3>Continuously monitored trust</h3>
+            <p>The moat is not one green check. The moat is proving when a provider drifts, downgrades, injects, or silently stops behaving like the model it sells.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="arbiter-shell" id="arbiter-floor">
+        <div class="arbiter-grid">
+          <div class="panel-glass arbiter-card">
+            <div class="section-label">Stateful local arbiter</div>
+            <h2>Keep auto-approve fast. Block only what’s actually dangerous.</h2>
+            <p class="lede-small">SafeRouter keeps session state, grants and policy locally. It doesn’t just ask “allow command?” — it understands what the user wanted, what was already granted, and what should never leave the machine.</p>
+
+            <div class="sandbox-panel">
+              <div class="section-label">Session</div>
+              <div class="sandbox-grid">
+                <label>
+                  <span>Task</span>
+                  <input id="sessionTask" type="text" value="Fix npm build safely" />
+                </label>
+                <button class="ghost-action" id="startSessionBtn" type="button">Start session</button>
+                <div class="session-meta" id="sessionMeta">No local session yet</div>
+              </div>
+              <div class="grant-grid">
+                <button class="grant-chip" data-grant="env_read" type="button">Grant .env read</button>
+                <button class="grant-chip" data-grant="config_write" type="button">Grant config write</button>
+              </div>
+              <div class="sandbox-grid">
+                <label>
+                  <span>Action kind</span>
+                  <div class="segmented-grid" id="policyKind">
+                    <button type="button" data-value="file-read" class="active">File read</button>
+                    <button type="button" data-value="command">Command</button>
+                    <button type="button" data-value="outbound-send">Outbound send</button>
+                    <button type="button" data-value="file-write">File write</button>
+                  </div>
+                </label>
+                <label>
+                  <span>Target</span>
+                  <input id="policyTarget" type="text" value=".env" />
+                </label>
+                <button class="secondary-btn wide" id="policyEvalBtn" type="button">Evaluate policy</button>
+                <div class="policy-result" id="policyResult">Decision will appear here</div>
+              </div>
             </div>
-            <div class="meta-note">Signed artifacts only</div>
           </div>
 
-          <div class="index-table modern">
-            <div class="table-head">
-              <span>Provider</span>
-              <span>Source</span>
-              <span>Honesty</span>
-              <span>Agent safety</span>
-              <span>Verdict</span>
-            </div>
-            <div id="registryRows">
-              <div class="table-row">
-                <span>cheap-claude-api.example</span>
-                <span>third-party</span>
-                <span>Low</span>
-                <span>High risk</span>
-                <strong class="danger-text">Do not use</strong>
+          <div class="panel-glass index-card" id="index">
+            <div class="panel-head index-head">
+              <div>
+                <div class="section-label">Provider Safety Index</div>
+                <h2>Local trust cache</h2>
               </div>
-              <div class="table-row">
-                <span>api.deepseek.com</span>
-                <span>official</span>
-                <span>High</span>
-                <span>Low risk</span>
-                <strong class="safe-text">Agent-safe</strong>
+              <div class="meta-inline">Signed artifacts only</div>
+            </div>
+
+            <div class="index-table modern">
+              <div class="table-head">
+                <span>Provider</span>
+                <span>Source</span>
+                <span>Honesty</span>
+                <span>Agent safety</span>
+                <span>Verdict</span>
+              </div>
+              <div id="registryRows">
+                <div class="table-row">
+                  <span>cheap-claude-api.example</span>
+                  <span>third-party</span>
+                  <span>Low</span>
+                  <span>High risk</span>
+                  <strong class="danger-text">Do not use</strong>
+                </div>
+                <div class="table-row">
+                  <span>api.deepseek.com</span>
+                  <span>official</span>
+                  <span>High</span>
+                  <span>Low risk</span>
+                  <strong class="safe-text">Agent-safe</strong>
+                </div>
               </div>
             </div>
           </div>
@@ -280,39 +312,5 @@
     </main>
 
     <script src="./app.js"></script>
-    <script>
-      (function () {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.src = './assets/logo_1safe.png';
-        img.onload = function () {
-          const size = 256;
-          const r = 60;
-          const canvas = document.createElement('canvas');
-          canvas.width = size;
-          canvas.height = size;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-
-          ctx.beginPath();
-          ctx.moveTo(r, 0);
-          ctx.lineTo(size - r, 0);
-          ctx.quadraticCurveTo(size, 0, size, r);
-          ctx.lineTo(size, size - r);
-          ctx.quadraticCurveTo(size, size, size - r, size);
-          ctx.lineTo(r, size);
-          ctx.quadraticCurveTo(0, size, 0, size - r);
-          ctx.lineTo(0, r);
-          ctx.quadraticCurveTo(0, 0, r, 0);
-          ctx.closePath();
-          ctx.clip();
-
-          ctx.drawImage(img, 0, 0, size, size);
-          const href = canvas.toDataURL('image/png');
-          const icon = document.querySelector('link[rel="icon"]');
-          if (icon) icon.href = href;
-        };
-      })();
-    </script>
   </body>
 </html>
