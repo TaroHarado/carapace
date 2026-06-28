@@ -16,6 +16,7 @@ pub mod identity;
 pub mod inspect;
 pub mod judge;
 pub mod mockevil;
+pub mod monitor;
 pub mod policy;
 pub mod probes;
 pub mod protocol;

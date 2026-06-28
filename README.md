@@ -299,6 +299,19 @@ This runs:
 - certify
 - add to local registry
 
+### Continuous monitor
+
+Run repeated deep scans against one provider:
+
+```bash
+cape monitor \
+  --upstream https://api.deepseek.com \
+  --claimed-model "DeepSeek V4 Flash" \
+  --interval 30m
+```
+
+This keeps appending provider history and printing drift deltas as behavior changes.
+
 ### Local trust registry
 
 Cache certified providers locally:
@@ -439,6 +452,7 @@ cape policy
 cape artifact
 cape audit
 cape sentinel
+cape monitor
 cape feed
 cape web
 cape keygen

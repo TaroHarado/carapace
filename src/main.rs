@@ -12,6 +12,7 @@ use carapace::bundle;
 use carapace::certify;
 use carapace::cli::{ArtifactCmd, Cli, Commands, Mode, PolicyCmd, RegistryCmd, SessionCmd};
 use carapace::deep_scan;
+use carapace::monitor;
 use carapace::policy::{Action, ActionKind, ProviderRisk};
 use carapace::probes;
 use carapace::proxy::{self, ProxyConfig};
@@ -368,6 +369,26 @@ async fn main() -> anyhow::Result<()> {
             sentinel::run(carapace::sentinel::SentinelConfig {
                 interval: dur,
                 max_rounds: None,
+            })
+            .await
+        }
+        Commands::Monitor {
+            upstream,
+            key,
+            claimed_model,
+            use_case,
+            interval,
+            max_rounds,
+        } => {
+            let dur = monitor::parse_interval(&interval)
+                .with_context(|| format!("invalid --interval `{interval}`"))?;
+            monitor::run(monitor::MonitorConfig {
+                upstream,
+                key: key.map(Secret::new),
+                claimed_model,
+                use_case,
+                interval: dur,
+                max_rounds,
             })
             .await
         }

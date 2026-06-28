@@ -192,6 +192,27 @@ pub enum Commands {
         interval: String,
     },
 
+    /// Continuously monitor one provider with repeated deep-scans.
+    Monitor {
+        #[arg(long)]
+        upstream: String,
+
+        #[arg(long, env = "CAPE_UPSTREAM_KEY")]
+        key: Option<String>,
+
+        #[arg(long)]
+        claimed_model: Option<String>,
+
+        #[arg(long, default_value = "coding-agent")]
+        use_case: String,
+
+        #[arg(long, default_value = "30m")]
+        interval: String,
+
+        #[arg(long)]
+        max_rounds: Option<u32>,
+    },
+
     /// Fetch and verify a signed remote threat feed (rules + blocklist + IoCs).
     Feed {
         /// Remote manifest URL (JSON, signed).
