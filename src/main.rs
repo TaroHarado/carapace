@@ -127,23 +127,40 @@ async fn main() -> anyhow::Result<()> {
             out,
             signing_key,
         } => {
-            let key = key.map(Secret::new);
-            let scan_report = scan::run(&upstream, key).await?;
-            let report = score::score_provider(&upstream, scan_report);
-            let badge_svg = score::render_badge_svg(&report);
-            let report_md = score::render_markdown(&report);
-            let mut entry = certify::RegistryEntry::from_score(&report, &badge_svg);
-            if let Some(sk) = signing_key {
-                entry.sign_with_base64_secret(&sk)?;
-            }
+            let (report, badge_svg, report_md, entry) =
+                build_certification_bundle(&upstream, key.map(Secret::new), signing_key).await?;
             let out_dir = out.to_str().unwrap_or(".");
             std::fs::write(format!("{out_dir}/report.md"), &report_md)?;
             std::fs::write(format!("{out_dir}/badge.svg"), &badge_svg)?;
-            std::fs::write(
-                format!("{out_dir}/entry.json"),
-                serde_json::to_string_pretty(&entry)?,
-            )?;
+            std::fs::write(format!("{out_dir}/entry.json"), serde_json::to_string_pretty(&entry)?)?;
             eprintln!("certify: wrote report.md, badge.svg, entry.json to {out_dir}");
+            if report.total < 50 {
+                std::process::exit(2);
+            }
+            Ok(())
+        }
+        Commands::Verify {
+            upstream,
+            key,
+            out,
+            signing_key,
+            registry: reg_path,
+        } => {
+            let (report, badge_svg, report_md, entry) =
+                build_certification_bundle(&upstream, key.map(Secret::new), signing_key).await?;
+
+            let out_dir = out.to_str().unwrap_or(".");
+            std::fs::write(format!("{out_dir}/report.md"), &report_md)?;
+            std::fs::write(format!("{out_dir}/badge.svg"), &badge_svg)?;
+            std::fs::write(format!("{out_dir}/entry.json"), serde_json::to_string_pretty(&entry)?)?;
+
+            let registry_path = reg_path.unwrap_or_else(registry::default_registry_path);
+            let mut reg = Registry::load(&registry_path)?;
+            reg.add(entry.clone());
+            reg.save(&registry_path)?;
+
+            eprintln!("verify: report.md, badge.svg, entry.json -> {out_dir}");
+            eprintln!("verify: registry updated -> {}", registry_path.display());
             if report.total < 50 {
                 std::process::exit(2);
             }
@@ -200,6 +217,25 @@ async fn main() -> anyhow::Result<()> {
                     if failed > 0 {
                         std::process::exit(2);
                     }
+                    Ok(())
+                }
+                RegistryCmd::Sync { url, pubkey, registry: path } => {
+                    let path = path.unwrap_or_else(registry::default_registry_path);
+                    let remote = registry::fetch_remote_registry(&url).await?;
+                    let mut failed = 0;
+                    for (host, res) in remote.verify_all(&pubkey) {
+                        if let Err(e) = res {
+                            failed += 1;
+                            eprintln!("FAIL {host} — {e}");
+                        }
+                    }
+                    if failed > 0 {
+                        anyhow::bail!("remote registry contains {failed} invalid entries");
+                    }
+                    let mut local = Registry::load(&path)?;
+                    local.merge(remote);
+                    local.save(&path)?;
+                    eprintln!("registry: synced -> {}", path.display());
                     Ok(())
                 }
             }
@@ -282,6 +318,27 @@ fn init_tracing(verbose: u8, quiet: bool) {
         .with_env_filter(filter)
         .with_target(false)
         .try_init();
+}
+
+async fn build_certification_bundle(
+    upstream: &str,
+    key: Option<Secret>,
+    signing_key: Option<String>,
+) -> anyhow::Result<(
+    score::ProviderScore,
+    String,
+    String,
+    certify::RegistryEntry,
+)> {
+    let scan_report = scan::run(upstream, key).await?;
+    let report = score::score_provider(upstream, scan_report);
+    let badge_svg = score::render_badge_svg(&report);
+    let report_md = score::render_markdown(&report);
+    let mut entry = certify::RegistryEntry::from_score(&report, &badge_svg);
+    if let Some(sk) = signing_key {
+        entry.sign_with_base64_secret(&sk)?;
+    }
+    Ok((report, badge_svg, report_md, entry))
 }
 
 // keep `Mode` in scope for `Block` default-checking later

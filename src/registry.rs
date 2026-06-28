@@ -68,6 +68,20 @@ impl Registry {
             .map(|e| (e.host.clone(), e.verify_with_pubkey(pubkey_b64)))
             .collect()
     }
+
+    pub fn merge(&mut self, other: Registry) {
+        for entry in other.entries {
+            self.add(entry);
+        }
+    }
+}
+
+pub async fn fetch_remote_registry(url: &str) -> anyhow::Result<Registry> {
+    let resp = reqwest::get(url).await?.error_for_status()?;
+    let raw = resp.text().await?;
+    let reg = serde_json::from_str(&raw)
+        .with_context(|| format!("parse remote registry from `{url}`"))?;
+    Ok(reg)
 }
 
 pub fn default_registry_path() -> PathBuf {

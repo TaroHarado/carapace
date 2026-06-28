@@ -280,6 +280,25 @@ Outputs:
 - `badge.svg`
 - `entry.json` (optionally signed)
 
+### One-shot verification pipeline
+
+If you want the whole flow in one command:
+
+```bash
+cape verify \
+  --upstream https://api.deepseek.com \
+  --key "$API_KEY" \
+  --out ./verify-out \
+  --registry ~/.carapace/registry.json
+```
+
+This runs:
+
+- scan
+- score
+- certify
+- add to local registry
+
 ### Local trust registry
 
 Cache certified providers locally:
@@ -336,6 +355,7 @@ cape proxy
 cape scan
 cape score
 cape certify
+cape verify
 cape registry
 cape audit
 cape sentinel

@@ -125,6 +125,27 @@ pub enum Commands {
         signing_key: Option<String>,
     },
 
+    /// One-shot pipeline: scan -> score -> certify -> add to local registry.
+    Verify {
+        #[arg(long)]
+        upstream: String,
+
+        #[arg(long, env = "CAPE_UPSTREAM_KEY")]
+        key: Option<String>,
+
+        /// Output directory for report.md, badge.svg and entry.json.
+        #[arg(long, default_value = ".")]
+        out: PathBuf,
+
+        /// Optional base64-encoded Ed25519 secret key for signing entry.json.
+        #[arg(long, env = "CAPE_CERTIFY_SECRET")]
+        signing_key: Option<String>,
+
+        /// Optional local registry path. Defaults to ~/.carapace/registry.json.
+        #[arg(long)]
+        registry: Option<PathBuf>,
+    },
+
     /// Manage the local provider trust registry.
     Registry {
         #[command(subcommand)]
@@ -194,6 +215,18 @@ pub enum RegistryCmd {
 
     /// Verify every registry entry against a known Ed25519 pubkey.
     Verify {
+        #[arg(long)]
+        pubkey: String,
+
+        #[arg(long)]
+        registry: Option<PathBuf>,
+    },
+
+    /// Merge a signed remote registry feed into the local cache.
+    Sync {
+        #[arg(long)]
+        url: String,
+
         #[arg(long)]
         pubkey: String,
 
