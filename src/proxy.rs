@@ -24,7 +24,8 @@ use hyper_util::rt::TokioIo;
 use tokio::sync::mpsc;
 
 use crate::cli::Mode;
-use crate::inspect::Inspector;
+use crate::inspect::{Inspector, Rules};
+use crate::judge::{self, JudgeConfig};
 use crate::protocol::anthropic;
 use crate::protocol::{self, Event, ProtocolAdapter};
 use crate::record::{EncryptedForensics, Recorder};
@@ -37,6 +38,8 @@ pub struct ProxyConfig {
     pub mode: Mode,
     pub recorder: Arc<Recorder>,
     pub forensics: Option<Arc<EncryptedForensics>>,
+    pub rules: Arc<Rules>,
+    pub judge: Option<Arc<JudgeConfig>>,
 }
 
 pub async fn run(cfg: ProxyConfig) -> anyhow::Result<()> {
@@ -47,6 +50,8 @@ pub async fn run(cfg: ProxyConfig) -> anyhow::Result<()> {
     let key = Arc::new(cfg.upstream_key);
     let mode = cfg.mode;
     let recorder = cfg.recorder.clone();
+    let rules = cfg.rules.clone();
+    let judge = cfg.judge.clone();
 
     loop {
         let (stream, peer) = match listener.accept().await {
@@ -60,6 +65,8 @@ pub async fn run(cfg: ProxyConfig) -> anyhow::Result<()> {
         let upstream = upstream.clone();
         let key = key.clone();
         let recorder = recorder.clone();
+        let rules = rules.clone();
+        let judge = judge.clone();
         tokio::spawn(async move {
             if let Err(e) = http1::Builder::new()
                 .serve_connection(
@@ -68,7 +75,9 @@ pub async fn run(cfg: ProxyConfig) -> anyhow::Result<()> {
                         let upstream = upstream.clone();
                         let key = key.clone();
                         let recorder = recorder.clone();
-                        async move { forward(req, &upstream, &key, mode, recorder).await }
+                        let rules = rules.clone();
+                        let judge = judge.clone();
+                        async move { forward(req, &upstream, &key, mode, recorder, rules, judge).await }
                     }),
                 )
                 .with_upgrades()
@@ -90,6 +99,8 @@ async fn forward(
     key: &Secret,
     mode: Mode,
     recorder: Arc<Recorder>,
+    rules: Arc<Rules>,
+    judge: Option<Arc<JudgeConfig>>,
 ) -> anyhow::Result<Response<BoxBody>> {
     let (mut parts, body) = req.into_parts();
 
@@ -152,7 +163,7 @@ async fn forward(
     let resp_bytes = rbody.collect().await?.to_bytes();
 
     let allowed_tools = parse_declared_tools(&body_bytes, protocol_name);
-    let mut inspector = Inspector::builtin(allowed_tools);
+    let mut inspector = Inspector::from_rules(&rules, allowed_tools);
 
     let (tx, rx) = mpsc::channel::<Chunk>(64);
     let recorder_cloned = recorder.clone();
@@ -168,6 +179,7 @@ async fn forward(
         mode_lite,
         inspector,
         recorder_cloned,
+        judge,
     ));
 
     let stream = ReceiveStream { rx };
@@ -189,6 +201,7 @@ async fn inspect_and_forward(
     mode: Mode,
     mut inspector: Inspector,
     recorder: Arc<Recorder>,
+    judge: Option<Arc<JudgeConfig>>,
 ) {
     use futures_util::StreamExt;
 
@@ -208,11 +221,26 @@ async fn inspect_and_forward(
             Event::TextDelta(s) => {
                 text_buf.push_str(&s);
                 let verdict = inspector.feed(&Event::TextDelta(s.clone()));
-                if !verdict.is_clean() && verdict.severity > max_severity {
-                    max_severity = verdict.severity;
-                    matched_categories.extend(verdict.matched.iter().cloned());
+                let mut escalated = false;
+                let mut effective_severity = verdict.severity;
+                if !verdict.is_clean() && (30..60).contains(&verdict.severity) {
+                    if let Some(cfg) = &judge {
+                        if let Ok(jv) = judge::judge(&s, cfg).await {
+                            if jv.is_malicious() {
+                                escalated = true;
+                                effective_severity = 85;
+                            }
+                        }
+                    }
                 }
-                if verdict.is_clean() {
+                if (!verdict.is_clean() || escalated) && effective_severity > max_severity {
+                    max_severity = effective_severity;
+                    matched_categories.extend(verdict.matched.iter().cloned());
+                    if escalated {
+                        matched_categories.push("llm-judge-escalated".to_string());
+                    }
+                }
+                if verdict.is_clean() && !escalated {
                     let bytes = original_text_frame(&s, protocol.as_str(), tool_index);
                     let _ = tx.send(Ok(bytes)).await;
                 } else {
@@ -244,10 +272,25 @@ async fn inspect_and_forward(
             }
             Event::ToolUseEnd => {
                 let verdict = inspector.feed(&Event::ToolUseEnd);
-                let is_malicious = !verdict.is_clean() && verdict.severity >= 60;
-                if !verdict.is_clean() && verdict.severity > max_severity {
-                    max_severity = verdict.severity;
+                let mut effective_severity = verdict.severity;
+                let mut judge_escalated = false;
+                if !verdict.is_clean() && (30..60).contains(&verdict.severity) {
+                    if let Some(cfg) = &judge {
+                        if let Ok(jv) = judge::judge(&tool_input, cfg).await {
+                            if jv.is_malicious() {
+                                effective_severity = 85;
+                                judge_escalated = true;
+                            }
+                        }
+                    }
+                }
+                let is_malicious = !verdict.is_clean() && effective_severity >= 60;
+                if !verdict.is_clean() && effective_severity > max_severity {
+                    max_severity = effective_severity;
                     matched_categories.extend(verdict.matched.iter().cloned());
+                    if judge_escalated {
+                        matched_categories.push("llm-judge-escalated".to_string());
+                    }
                 }
                 if matches!(mode, Mode::Block) && is_malicious {
                     blocked_count += 1;

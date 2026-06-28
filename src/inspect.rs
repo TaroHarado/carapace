@@ -21,7 +21,7 @@ use crate::protocol::Event;
 
 /// Loaded rules file. Built-in default is embedded at compile time; user may
 /// override at runtime via `--rules`.
-#[derive(serde::Deserialize, Debug)]
+#[derive(serde::Deserialize, Debug, Clone)]
 pub struct Rules {
     #[serde(default)]
     pub rules: Vec<Rule>,
@@ -74,6 +74,43 @@ pub static BUILTIN: Lazy<Rules> = Lazy::new(|| {
     };
     Rules { rules, blocklist }
 });
+
+/// Load override files in the same on-disk format as the embedded defaults:
+///
+/// - rules: `{ "rules": [ ... ] }`
+/// - blocklist: `{ "blocklist": [ ... ] }`
+///
+/// Any missing path falls back to the builtin portion, so you can override
+/// only one half and inherit the other.
+pub fn load_from_files(
+    rules_path: Option<&std::path::Path>,
+    blocklist_path: Option<&std::path::Path>,
+) -> anyhow::Result<Rules> {
+    #[derive(serde::Deserialize)]
+    struct RulesFile {
+        rules: Vec<Rule>,
+    }
+    #[derive(serde::Deserialize)]
+    struct BlocklistFile {
+        blocklist: Vec<String>,
+    }
+
+    let rules = if let Some(path) = rules_path {
+        let raw = std::fs::read_to_string(path)?;
+        serde_json::from_str::<RulesFile>(&raw)?.rules
+    } else {
+        BUILTIN.rules.clone()
+    };
+
+    let blocklist = if let Some(path) = blocklist_path {
+        let raw = std::fs::read_to_string(path)?;
+        serde_json::from_str::<BlocklistFile>(&raw)?.blocklist
+    } else {
+        BUILTIN.blocklist.clone()
+    };
+
+    Ok(Rules { rules, blocklist })
+}
 
 /// Compiled rule (regex pre-built).
 #[derive(Clone)]

@@ -26,8 +26,8 @@ async fn main() -> anyhow::Result<()> {
             upstream_key,
             mode,
             log,
-            rules: _,
-            blocklist: _,
+            rules,
+            blocklist,
             forensics,
             forensics_pass,
         } => {
@@ -39,6 +39,12 @@ async fn main() -> anyhow::Result<()> {
                 None => Secret::empty(),
             };
             let recorder = Recorder::open(&log).context("open log")?;
+            let loaded_rules = carapace::inspect::load_from_files(
+                rules.as_deref(),
+                blocklist.as_deref(),
+            )
+            .context("load rules/blocklist")?;
+            let judge = carapace::judge::from_env().map(std::sync::Arc::new);
             let forensics = match (forensics, forensics_pass) {
                 (Some(path), Some(pass)) => Some(std::sync::Arc::new(
                     EncryptedForensics::open(
@@ -57,6 +63,8 @@ async fn main() -> anyhow::Result<()> {
                 mode,
                 recorder: std::sync::Arc::new(recorder),
                 forensics,
+                rules: std::sync::Arc::new(loaded_rules),
+                judge,
             };
             proxy::run(cfg).await
         }

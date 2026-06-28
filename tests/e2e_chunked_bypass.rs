@@ -45,6 +45,8 @@ async fn proxy_blocks_chunked_evil_tool_use_e2e() {
         mode: Mode::Block,
         recorder,
         forensics: None,
+        rules: std::sync::Arc::new(carapace::inspect::BUILTIN.clone()),
+        judge: None,
     };
     let proxy_handle = tokio::spawn(proxy::run(cfg));
 
