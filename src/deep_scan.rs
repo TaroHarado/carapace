@@ -8,13 +8,12 @@
 //! - uptime confidence
 //! - drift against the previous run
 
-use std::collections::HashMap;
-use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
+use crate::history;
 use crate::identity;
 use crate::probes::{self, AgentVerdict, BatteryReport, Probe};
 use crate::secure::Secret;
@@ -56,15 +55,6 @@ pub struct DriftSummary {
     pub latency_delta_ms: i32,
     pub verdict_changed: bool,
     pub summary: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct DeepScanSnapshot {
-    host: String,
-    identity_confidence: u32,
-    agent_safety_score: u32,
-    latency_p95_ms: u32,
-    verdict: AgentVerdict,
 }
 
 struct ProbeExecution {
@@ -130,30 +120,24 @@ pub async fn run(
     );
     let metrics = compute_metrics(&latencies, battery.total_probes, errored);
 
-    let snapshot = DeepScanSnapshot {
-        host: extract_host(upstream),
-        identity_confidence: identity.confidence,
-        agent_safety_score: battery.agent_safety_score,
-        latency_p95_ms: metrics.latency_p95_ms,
-        verdict,
-    };
-    let drift = update_and_diff_snapshot(snapshot);
-
-    Ok(DeepScanReport {
+    let mut report = DeepScanReport {
         upstream: upstream.to_string(),
         claimed_model,
         use_case: use_case.to_string(),
         identity,
         battery,
         metrics,
-        drift,
+        drift: None,
         verdict,
         summary: match verdict {
             AgentVerdict::AgentSafe => "No critical probe failures observed. Candidate for auto-approve workflows.".into(),
             AgentVerdict::ChatOnly => "Some unsafe patterns observed. Suitable for chat/manual review only.".into(),
             AgentVerdict::DoNotUse => "Critical probe failures observed. Do not use with coding agents.".into(),
         },
-    })
+    };
+
+    report.drift = update_and_diff_history(&report);
+    Ok(report)
 }
 
 pub fn render_markdown(report: &DeepScanReport) -> String {
@@ -448,40 +432,14 @@ fn percentile(sorted: &[u32], p: f32) -> u32 {
     sorted[idx]
 }
 
-fn extract_host(url: &str) -> String {
-    let without_scheme = url
-        .trim_start_matches("https://")
-        .trim_start_matches("http://");
-    without_scheme.split('/').next().unwrap_or(without_scheme).to_string()
-}
-
-fn state_path() -> PathBuf {
-    if cfg!(target_os = "windows") {
-        if let Ok(home) = std::env::var("USERPROFILE") {
-            return PathBuf::from(home).join(".carapace").join("deep-scan-state.json");
-        }
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".carapace").join("deep-scan-state.json");
-    }
-    PathBuf::from("deep-scan-state.json")
-}
-
-fn update_and_diff_snapshot(current: DeepScanSnapshot) -> Option<DriftSummary> {
-    let path = state_path();
-    let mut state: HashMap<String, DeepScanSnapshot> = if path.exists() {
-        std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|raw| serde_json::from_str(&raw).ok())
-            .unwrap_or_default()
-    } else {
-        HashMap::new()
-    };
-
-    let drift = state.get(&current.host).map(|prev| {
-        let identity_delta = current.identity_confidence as i32 - prev.identity_confidence as i32;
+fn update_and_diff_history(report: &DeepScanReport) -> Option<DriftSummary> {
+    let root = history::default_root();
+    let current = history::from_report(report);
+    let previous = history::latest(&root, &current.host).ok().flatten();
+    let drift = previous.as_ref().map(|prev| {
+        let identity_delta = current.identity.confidence as i32 - prev.identity.confidence as i32;
         let safety_delta = current.agent_safety_score as i32 - prev.agent_safety_score as i32;
-        let latency_delta = current.latency_p95_ms as i32 - prev.latency_p95_ms as i32;
+        let latency_delta = current.metrics.latency_p95_ms as i32 - prev.metrics.latency_p95_ms as i32;
         let verdict_changed = current.verdict != prev.verdict;
         let summary = format!(
             "Compared to the previous run: identity {:+}, safety {:+}, p95 latency {:+}ms{}.",
@@ -499,12 +457,7 @@ fn update_and_diff_snapshot(current: DeepScanSnapshot) -> Option<DriftSummary> {
             summary,
         }
     });
-
-    state.insert(current.host.clone(), current);
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let _ = std::fs::write(&path, serde_json::to_string_pretty(&state).unwrap_or_default());
+    let _ = history::append(&root, &current);
     drift
 }
 
@@ -582,27 +535,50 @@ mod tests {
 
     #[test]
     fn drift_summary_detects_changes() {
-        let dir = std::env::temp_dir().join(format!("carapace-deepscan-state-{}", std::process::id()));
-        let _ = std::fs::remove_file(&dir);
-        std::env::set_var("HOME", std::env::temp_dir());
-        std::env::set_var("USERPROFILE", std::env::temp_dir());
+        let base = std::env::temp_dir().join(format!("carapace-history-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::env::set_var("HOME", base.clone());
+        std::env::set_var("USERPROFILE", base.clone());
 
-        let first = DeepScanSnapshot {
-            host: "api.deepseek.com".into(),
-            identity_confidence: 80,
-            agent_safety_score: 90,
-            latency_p95_ms: 1200,
+        let first = DeepScanReport {
+            upstream: "https://api.deepseek.com".into(),
+            claimed_model: Some("DeepSeek V4 Flash".into()),
+            use_case: "coding-agent".into(),
+            identity: identity::IdentityReport {
+                claimed_model: Some("DeepSeek V4 Flash".into()),
+                claimed_family: identity::ModelFamily::DeepSeek,
+                observed_family: identity::ModelFamily::DeepSeek,
+                confidence: 80,
+                risk: identity::IdentityRisk::Low,
+                reasons: vec![],
+            },
+            battery: BatteryReport {
+                total_probes: 20,
+                flagged_probes: 1,
+                errored_probes: 0,
+                results: vec![],
+                category_scores: vec![],
+                agent_safety_score: 90,
+                verdict: AgentVerdict::AgentSafe,
+            },
+            metrics: DeepScanMetrics {
+                latency_p50_ms: 800,
+                latency_p95_ms: 1200,
+                successful_probes: 20,
+                uptime_confidence: UptimeConfidence::High,
+            },
+            drift: None,
             verdict: AgentVerdict::AgentSafe,
+            summary: String::new(),
         };
-        let second = DeepScanSnapshot {
-            host: "api.deepseek.com".into(),
-            identity_confidence: 60,
-            agent_safety_score: 70,
-            latency_p95_ms: 1800,
-            verdict: AgentVerdict::ChatOnly,
-        };
-        let _ = update_and_diff_snapshot(first);
-        let drift = update_and_diff_snapshot(second).unwrap();
+        let mut second = first.clone();
+        second.identity.confidence = 60;
+        second.battery.agent_safety_score = 70;
+        second.metrics.latency_p95_ms = 1800;
+        second.verdict = AgentVerdict::ChatOnly;
+        let _ = update_and_diff_history(&first);
+        let drift = update_and_diff_history(&second).unwrap();
         assert!(drift.verdict_changed);
+        let _ = std::fs::remove_dir_all(base);
     }
 }
