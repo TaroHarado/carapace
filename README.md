@@ -328,6 +328,24 @@ This checks:
 - SHA256SUMS against the actual files
 - optional signature on `entry.json`
 
+### Local SafeRouter web UI
+
+Run the site locally against the real engine:
+
+```bash
+cape web --listen 127.0.0.1:8484 --site ./site
+```
+
+Then open `http://127.0.0.1:8484`.
+
+The page talks to the local API endpoints:
+
+- `/api/scan`
+- `/api/deep-scan`
+- `/api/score`
+
+If the daemon is not running, the frontend falls back to a mock demo state.
+
 ---
 
 ## LLM judge slow-path
@@ -368,13 +386,16 @@ Notable e2e cases:
 ```bash
 cape proxy
 cape scan
+cape deep-scan
 cape score
 cape certify
 cape verify
 cape registry
+cape artifact
 cape audit
 cape sentinel
 cape feed
+cape web
 ```
 
 ---

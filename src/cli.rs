@@ -207,6 +207,17 @@ pub enum Commands {
         #[arg(long, default_value = ".")]
         out: PathBuf,
     },
+
+    /// Launch the local SafeRouter web UI/API.
+    Web {
+        /// Listen address for the local web daemon.
+        #[arg(long, default_value = "127.0.0.1:8484")]
+        listen: String,
+
+        /// Directory containing the static SafeRouter site.
+        #[arg(long, default_value = "site")]
+        site: PathBuf,
+    },
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum, Default)]

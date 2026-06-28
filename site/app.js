@@ -16,10 +16,11 @@ for (const button of useCase.querySelectorAll("button")) {
   });
 }
 
-form.addEventListener("submit", (event) => {
+form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const url = document.getElementById("baseUrl").value.trim();
+  const apiKey = document.getElementById("apiKey").value.trim();
   const claimedModel = document.getElementById("claimedModel").value.trim();
 
   const host = safeHost(url);
@@ -27,14 +28,44 @@ form.addEventListener("submit", (event) => {
 
   state.textContent = "Scanning";
 
-  const scenario = mockVerdict(activeUseCase, claimedModel, host);
-  animateNumber(honestyScore, scenario.honesty);
-  animateNumber(agentScore, scenario.agent);
-  finalVerdict.textContent = scenario.text;
+  try {
+    const [scoreRes, deepRes] = await Promise.all([
+      fetch("/api/score", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base_url: url, api_key: apiKey }),
+      }),
+      fetch("/api/deep-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          base_url: url,
+          api_key: apiKey,
+          claimed_model: claimedModel,
+          use_case: activeUseCase,
+        }),
+      }),
+    ]);
 
-  requestAnimationFrame(() => {
+    if (!scoreRes.ok || !deepRes.ok) throw new Error("local API unavailable");
+
+    const score = await scoreRes.json();
+    const deep = await deepRes.json();
+    const scenario = liveVerdict(score, deep);
+
+    animateNumber(honestyScore, scenario.honesty);
+    animateNumber(agentScore, scenario.agent);
+    finalVerdict.textContent = scenario.text;
     state.textContent = scenario.state;
-  });
+  } catch {
+    const scenario = mockVerdict(activeUseCase, claimedModel, host);
+    animateNumber(honestyScore, scenario.honesty);
+    animateNumber(agentScore, scenario.agent);
+    finalVerdict.textContent = scenario.text;
+    requestAnimationFrame(() => {
+      state.textContent = `${scenario.state} (mock)`;
+    });
+  }
 });
 
 function safeHost(url) {
@@ -88,4 +119,17 @@ function mockVerdict(useCase, model, host) {
   return official
     ? { honesty: 84, agent: 69, text: "Borderline. Monitor before auto-approve.", state: "Review" }
     : { honesty: 57, agent: 41, text: "Not recommended for coding agents", state: "Chat-only" };
+}
+
+function liveVerdict(score, deep) {
+  const honesty = score.total ?? 0;
+  const agent = deep.battery?.agent_safety_score ?? 0;
+  let state = "Review";
+  let text = deep.summary || score.summary || "Safety report generated";
+
+  if (deep.verdict === "AgentSafe") state = "Agent-safe";
+  else if (deep.verdict === "ChatOnly") state = "Chat-only";
+  else if (deep.verdict === "DoNotUse") state = "Block";
+
+  return { honesty, agent, text, state };
 }

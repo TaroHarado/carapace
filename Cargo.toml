@@ -25,6 +25,7 @@ bin-dir = "{ bin }{ binary-ext }"
 
 [dependencies]
 tokio = { version = "1.41", features = ["full"] }
+axum = { version = "0.7", features = ["json"] }
 hyper = { version = "1.5", features = ["server", "client", "http1", "http2"] }
 hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "http2", "tokio"] }
 http = "1.1"

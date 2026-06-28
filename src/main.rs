@@ -20,6 +20,7 @@ use carapace::scan;
 use carapace::score;
 use carapace::secure::Secret;
 use carapace::sentinel;
+use carapace::web;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -358,6 +359,16 @@ async fn main() -> anyhow::Result<()> {
             .context("write manifest.json")?;
             eprintln!("feed: wrote rules.json, blocklist.json, manifest.json to {out}");
             Ok(())
+        }
+        Commands::Web { listen, site } => {
+            let listen = listen
+                .parse()
+                .with_context(|| format!("invalid --listen `{listen}`"))?;
+            web::run(web::WebConfig {
+                listen,
+                site_dir: site,
+            })
+            .await
         }
     }
 }
