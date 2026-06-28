@@ -14,6 +14,7 @@ const uptimeLine = document.getElementById("uptimeLine");
 const useCase = document.getElementById("useCase");
 const registryRows = document.getElementById("registryRows");
 const judgeStatus = document.getElementById("judgeStatus");
+const historyTimeline = document.getElementById("historyTimeline");
 const sessionTask = document.getElementById("sessionTask");
 const startSessionBtn = document.getElementById("startSessionBtn");
 const sessionMeta = document.getElementById("sessionMeta");
@@ -151,6 +152,7 @@ form.addEventListener("submit", async (event) => {
     latencyLine.textContent = scenario.latency;
     uptimeLine.textContent = scenario.uptime;
     state.textContent = scenario.state;
+    refreshHistory(host).catch(() => {});
   } catch {
     const scenario = mockVerdict(activeUseCase, claimedModel, host);
     animateNumber(honestyScore, scenario.honesty);
@@ -171,6 +173,7 @@ form.addEventListener("submit", async (event) => {
 
 refreshRegistry().catch(() => {});
 refreshHealth().catch(() => {});
+refreshHistory().catch(() => {});
 
 function safeHost(url) {
   try {
@@ -270,6 +273,38 @@ async function refreshRegistry() {
       <strong class="${verdictClass}">${verdictText}</strong>
     `;
     registryRows.appendChild(row);
+  }
+}
+
+async function refreshHistory(host = null) {
+  if (!historyTimeline) return;
+  const res = await fetch("/api/history", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(host ? { host } : {}),
+  });
+  if (!res.ok) throw new Error("history unavailable");
+  const history = await res.json();
+  if (!Array.isArray(history) || history.length === 0) {
+    historyTimeline.innerHTML = `
+      <div class="history-item">
+        <span>no scans yet</span>
+        <strong>run verify</strong>
+      </div>
+    `;
+    return;
+  }
+
+  historyTimeline.innerHTML = "";
+  for (const item of history.slice(0, 4)) {
+    const driftLabel = `${item.identity.confidence}/100 identity · ${item.agent_safety_score}/100 safety`;
+    const row = document.createElement("div");
+    row.className = "history-item";
+    row.innerHTML = `
+      <span>${item.checked_at}</span>
+      <strong>${driftLabel}</strong>
+    `;
+    historyTimeline.appendChild(row);
   }
 }
 
