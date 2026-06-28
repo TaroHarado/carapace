@@ -262,6 +262,24 @@ What it does:
 This is the technical base for future legit-check / `Verified Clean` style
 provider audits.
 
+### Certification bundle
+
+Generate a publish-ready bundle:
+
+```bash
+cape certify \
+  --upstream https://api.deepseek.com \
+  --key "$API_KEY" \
+  --out ./cert-out \
+  --signing-key "$CAPE_CERTIFY_SECRET"
+```
+
+Outputs:
+
+- `report.md`
+- `badge.svg`
+- `entry.json` (optionally signed)
+
 ---
 
 ## LLM judge slow-path
@@ -303,6 +321,7 @@ Notable e2e cases:
 cape proxy
 cape scan
 cape score
+cape certify
 cape audit
 cape sentinel
 cape feed

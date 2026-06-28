@@ -12,7 +12,7 @@
 //! This is the first step toward the business layer: reputation, audits,
 //! scoring, and eventually a paid certification service.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::scan::{RiskLevel, ScanReport};
 
@@ -29,7 +29,7 @@ pub struct ProviderScore {
     pub scan: ScanReport,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Grade {
     A,
     B,

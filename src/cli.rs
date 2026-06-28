@@ -108,6 +108,23 @@ pub enum Commands {
         badge: Option<PathBuf>,
     },
 
+    /// Generate a publish-ready certification bundle (report + badge + signed registry entry).
+    Certify {
+        #[arg(long)]
+        upstream: String,
+
+        #[arg(long, env = "CAPE_UPSTREAM_KEY")]
+        key: Option<String>,
+
+        /// Output directory for report.md, badge.svg and entry.json.
+        #[arg(long, default_value = ".")]
+        out: PathBuf,
+
+        /// Optional base64-encoded Ed25519 secret key for signing entry.json.
+        #[arg(long, env = "CAPE_CERTIFY_SECRET")]
+        signing_key: Option<String>,
+    },
+
     /// One-shot host audit: known IoCs for malicious-LLM campaigns.
     Audit,
 

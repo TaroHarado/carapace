@@ -5,6 +5,7 @@
 //! alerts or blocks. Memory-safe key handling, crash-isolated core.
 
 pub mod audit;
+pub mod certify;
 pub mod cli;
 pub mod feed;
 pub mod inspect;

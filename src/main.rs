@@ -7,6 +7,7 @@ use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
 use carapace::audit;
+use carapace::certify;
 use carapace::cli::{Cli, Commands, Mode};
 use carapace::proxy::{self, ProxyConfig};
 use carapace::record::{EncryptedForensics, Recorder};
@@ -114,6 +115,34 @@ async fn main() -> anyhow::Result<()> {
                 eprintln!("{rendered}");
             }
 
+            if report.total < 50 {
+                std::process::exit(2);
+            }
+            Ok(())
+        }
+        Commands::Certify {
+            upstream,
+            key,
+            out,
+            signing_key,
+        } => {
+            let key = key.map(Secret::new);
+            let scan_report = scan::run(&upstream, key).await?;
+            let report = score::score_provider(&upstream, scan_report);
+            let badge_svg = score::render_badge_svg(&report);
+            let report_md = score::render_markdown(&report);
+            let mut entry = certify::RegistryEntry::from_score(&report, &badge_svg);
+            if let Some(sk) = signing_key {
+                entry.sign_with_base64_secret(&sk)?;
+            }
+            let out_dir = out.to_str().unwrap_or(".");
+            std::fs::write(format!("{out_dir}/report.md"), &report_md)?;
+            std::fs::write(format!("{out_dir}/badge.svg"), &badge_svg)?;
+            std::fs::write(
+                format!("{out_dir}/entry.json"),
+                serde_json::to_string_pretty(&entry)?,
+            )?;
+            eprintln!("certify: wrote report.md, badge.svg, entry.json to {out_dir}");
             if report.total < 50 {
                 std::process::exit(2);
             }
