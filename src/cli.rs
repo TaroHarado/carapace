@@ -87,6 +87,27 @@ pub enum Commands {
         key: Option<String>,
     },
 
+    /// Produce a certification-style provider score from a canary scan.
+    Score {
+        #[arg(long)]
+        upstream: String,
+
+        #[arg(long, env = "CAPE_UPSTREAM_KEY")]
+        key: Option<String>,
+
+        /// Output format: json | markdown
+        #[arg(long, default_value = "markdown")]
+        format: String,
+
+        /// Optional output file for the report.
+        #[arg(long)]
+        out: Option<PathBuf>,
+
+        /// Optional SVG badge output path.
+        #[arg(long)]
+        badge: Option<PathBuf>,
+    },
+
     /// One-shot host audit: known IoCs for malicious-LLM campaigns.
     Audit,
 

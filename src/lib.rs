@@ -14,6 +14,7 @@ pub mod protocol;
 pub mod proxy;
 pub mod record;
 pub mod scan;
+pub mod score;
 pub mod secure;
 pub mod sentinel;
 pub mod tools;

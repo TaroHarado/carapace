@@ -238,6 +238,32 @@ better ones.
 
 ---
 
+## Provider scoring / legit-check foundation
+
+`carapace` now ships the first local foundation for provider scoring.
+
+```bash
+cape score \
+  --upstream https://api.deepseek.com \
+  --key "$API_KEY" \
+  --format markdown \
+  --out provider-report.md \
+  --badge provider-badge.svg
+```
+
+What it does:
+
+- runs the same canary probe as `cape scan`
+- combines transport, identity, active behaviour, and protocol hygiene into a
+  **0-100 score**
+- emits a **letter grade** (`A`..`F`)
+- writes a human-readable report and a small SVG badge
+
+This is the technical base for future legit-check / `Verified Clean` style
+provider audits.
+
+---
+
 ## LLM judge slow-path
 
 Some payloads are too weird for regex alone.
@@ -276,6 +302,7 @@ Notable e2e cases:
 ```bash
 cape proxy
 cape scan
+cape score
 cape audit
 cape sentinel
 cape feed

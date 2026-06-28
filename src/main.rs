@@ -11,6 +11,7 @@ use carapace::cli::{Cli, Commands, Mode};
 use carapace::proxy::{self, ProxyConfig};
 use carapace::record::{EncryptedForensics, Recorder};
 use carapace::scan;
+use carapace::score;
 use carapace::secure::Secret;
 use carapace::sentinel;
 
@@ -79,6 +80,41 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("bytes: {}", report.bytes_received);
             eprintln!("note: {}", report.note);
             if report.risk_score >= 60 {
+                std::process::exit(2);
+            }
+            Ok(())
+        }
+        Commands::Score {
+            upstream,
+            key,
+            format,
+            out,
+            badge,
+        } => {
+            let key = key.map(Secret::new);
+            let scan_report = scan::run(&upstream, key).await?;
+            let report = score::score_provider(&upstream, scan_report);
+
+            if let Some(path) = badge {
+                std::fs::write(&path, score::render_badge_svg(&report))
+                    .with_context(|| format!("write badge `{}`", path.display()))?;
+                eprintln!("badge written: {}", path.display());
+            }
+
+            let rendered = match format.as_str() {
+                "json" => serde_json::to_string_pretty(&report)?,
+                _ => score::render_markdown(&report),
+            };
+
+            if let Some(path) = out {
+                std::fs::write(&path, &rendered)
+                    .with_context(|| format!("write report `{}`", path.display()))?;
+                eprintln!("report written: {}", path.display());
+            } else {
+                eprintln!("{rendered}");
+            }
+
+            if report.total < 50 {
                 std::process::exit(2);
             }
             Ok(())
