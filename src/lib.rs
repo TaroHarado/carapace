@@ -8,6 +8,7 @@ pub mod audit;
 pub mod cli;
 pub mod feed;
 pub mod inspect;
+pub mod judge;
 pub mod mockevil;
 pub mod protocol;
 pub mod proxy;

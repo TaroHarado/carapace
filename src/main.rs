@@ -100,6 +100,45 @@ async fn main() -> anyhow::Result<()> {
             })
             .await
         }
+        Commands::Feed { url, pubkey, out } => {
+            let out = out.to_str().unwrap_or(".").to_string();
+            eprintln!("cape feed: fetching {url}");
+            let fetched = carapace::feed::fetch_remote(&url)
+                .await
+                .context("fetch remote feed")?;
+            eprintln!(
+                "feed: v{} generated {}",
+                fetched.manifest.version, fetched.manifest.generated_at
+            );
+            if let Some(pk) = &pubkey {
+                match fetched.manifest.verify_signature_with_pubkey(pk) {
+                    Ok(()) => eprintln!("feed: signature OK (pubkey {pk})"),
+                    Err(e) => {
+                        eprintln!("feed: signature FAIL — {e}");
+                        anyhow::bail!("feed signature verification failed");
+                    }
+                }
+            } else {
+                eprintln!("feed: no --pubkey given, signature NOT verified");
+            }
+            if fetched.manifest.verify_integrity(&fetched.rules, &fetched.blocklist) {
+                eprintln!("feed: integrity OK");
+            } else {
+                eprintln!("feed: integrity FAIL — hashes don't match");
+                anyhow::bail!("feed integrity check failed");
+            }
+            std::fs::write(format!("{out}/rules.json"), &fetched.rules)
+                .context("write rules.json")?;
+            std::fs::write(format!("{out}/blocklist.json"), &fetched.blocklist)
+                .context("write blocklist.json")?;
+            std::fs::write(
+                format!("{out}/manifest.json"),
+                serde_json::to_string_pretty(&fetched.manifest)?,
+            )
+            .context("write manifest.json")?;
+            eprintln!("feed: wrote rules.json, blocklist.json, manifest.json to {out}");
+            Ok(())
+        }
     }
 }
 

@@ -117,6 +117,92 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// A fetched feed bundle: manifest + the two payload files.
+pub struct FetchedFeed {
+    pub manifest: FeedManifest,
+    pub rules: String,
+    pub blocklist: String,
+}
+
+/// Download a signed remote feed from a manifest URL.
+///
+/// The URL is expected to return JSON in the shape of `FeedManifest` **plus**
+/// two inline string fields `rules` and `blocklist` (each the raw file contents).
+/// This keeps the wire format to a single round-trip and lets us verify
+/// integrity before ever touching disk.
+pub async fn fetch_remote(url: &str) -> anyhow::Result<FetchedFeed> {
+    let resp = reqwest::get(url).await?.error_for_status()?;
+    let body = resp.text().await?;
+    let v: serde_json::Value = serde_json::from_str(&body)?;
+
+    let manifest = FeedManifest {
+        version: v["version"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("manifest: missing version"))?
+            .to_string(),
+        generated_at: v["generated_at"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("manifest: missing generated_at"))?
+            .to_string(),
+        rules_sha256: v["rules_sha256"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("manifest: missing rules_sha256"))?
+            .to_string(),
+        blocklist_sha256: v["blocklist_sha256"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("manifest: missing blocklist_sha256"))?
+            .to_string(),
+        signature: v["signature"].as_str().map(|s| s.to_string()),
+    };
+    let rules = v["rules"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("manifest: missing rules payload"))?
+        .to_string();
+    let blocklist = v["blocklist"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("manifest: missing blocklist payload"))?
+        .to_string();
+
+    Ok(FetchedFeed {
+        manifest,
+        rules,
+        blocklist,
+    })
+}
+
+impl FeedManifest {
+    /// Verify the signature against an **explicit** base64 Ed25519 public key
+    /// (instead of the embedded one). Used by `cape feed fetch --pubkey`.
+    pub fn verify_signature_with_pubkey(&self, pk_b64: &str) -> Result<(), VerifyError> {
+        use base64::Engine as _;
+        use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+
+        let sig_b64 = self.signature.as_ref().ok_or(VerifyError::MissingSignature)?;
+        let sig_bytes = base64::engine::general_purpose::STANDARD
+            .decode(sig_b64.as_bytes())
+            .map_err(|_| VerifyError::MalformedSignature)?;
+        if sig_bytes.len() != 64 {
+            return Err(VerifyError::MalformedSignature);
+        }
+        let sig = Signature::from_slice(&sig_bytes).map_err(|_| VerifyError::MalformedSignature)?;
+
+        let pk_bytes = base64::engine::general_purpose::STANDARD
+            .decode(pk_b64.as_bytes())
+            .map_err(|_| VerifyError::MalformedPublicKey)?;
+        if pk_bytes.len() != 32 {
+            return Err(VerifyError::MalformedPublicKey);
+        }
+        let pk_arr: [u8; 32] = pk_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| VerifyError::MalformedPublicKey)?;
+        let vk = VerifyingKey::from_bytes(&pk_arr).map_err(|_| VerifyError::MalformedPublicKey)?;
+
+        vk.verify(&self.signing_digest(), &sig)
+            .map_err(|_| VerifyError::SignatureMismatch)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -95,6 +95,22 @@ pub enum Commands {
         #[arg(long, default_value = "30s")]
         interval: String,
     },
+
+    /// Fetch and verify a signed remote threat feed (rules + blocklist + IoCs).
+    Feed {
+        /// Remote manifest URL (JSON, signed).
+        #[arg(long)]
+        url: String,
+
+        /// Ed25519 public key (base64) to verify the feed signature.
+        /// If omitted, only integrity hashes are checked (no signature trust).
+        #[arg(long, env = "CAPE_FEED_PUBKEY")]
+        pubkey: Option<String>,
+
+        /// Output directory for rules.json + blocklist.json.
+        #[arg(long, default_value = ".")]
+        out: PathBuf,
+    },
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
