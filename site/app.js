@@ -13,6 +13,16 @@ const latencyLine = document.getElementById("latencyLine");
 const uptimeLine = document.getElementById("uptimeLine");
 const useCase = document.getElementById("useCase");
 const registryRows = document.getElementById("registryRows");
+const sessionTask = document.getElementById("sessionTask");
+const startSessionBtn = document.getElementById("startSessionBtn");
+const sessionMeta = document.getElementById("sessionMeta");
+const policyKind = document.getElementById("policyKind");
+const policyTarget = document.getElementById("policyTarget");
+const policyEvalBtn = document.getElementById("policyEvalBtn");
+const policyResult = document.getElementById("policyResult");
+
+let activePolicyKind = "file-read";
+let currentSessionId = null;
 
 let activeUseCase = "coding-agent";
 
@@ -21,6 +31,82 @@ for (const button of useCase.querySelectorAll("button")) {
     for (const b of useCase.querySelectorAll("button")) b.classList.remove("active");
     button.classList.add("active");
     activeUseCase = button.dataset.value;
+  });
+}
+
+if (policyKind) {
+  for (const button of policyKind.querySelectorAll("button")) {
+    button.addEventListener("click", () => {
+      for (const b of policyKind.querySelectorAll("button")) b.classList.remove("active");
+      button.classList.add("active");
+      activePolicyKind = button.dataset.value;
+    });
+  }
+}
+
+for (const grantBtn of document.querySelectorAll(".grant-btn")) {
+  grantBtn.addEventListener("click", async () => {
+    if (!currentSessionId) {
+      policyResult.textContent = "Start a session first";
+      return;
+    }
+    const grant = grantBtn.dataset.grant;
+    const active = grantBtn.classList.toggle("active-grant");
+    try {
+      await fetch("/api/session/grant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: currentSessionId, name: grant, value: active }),
+      });
+      policyResult.textContent = `Grant ${grant}=${active} updated`;
+    } catch {
+      policyResult.textContent = "Grant update failed";
+    }
+  });
+}
+
+if (startSessionBtn) {
+  startSessionBtn.addEventListener("click", async () => {
+    try {
+      const res = await fetch("/api/session/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: sessionTask.value.trim() || "SafeRouter session" }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      currentSessionId = data.session_id;
+      sessionMeta.textContent = `Session ${data.session_id} / task: ${data.current_task}`;
+      policyResult.textContent = "Session ready";
+    } catch {
+      sessionMeta.textContent = "Session init failed";
+    }
+  });
+}
+
+if (policyEvalBtn) {
+  policyEvalBtn.addEventListener("click", async () => {
+    if (!currentSessionId) {
+      policyResult.textContent = "Start a session first";
+      return;
+    }
+    try {
+      const res = await fetch("/api/policy/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: currentSessionId,
+          action_kind: activePolicyKind,
+          target: policyTarget.value,
+          provider_risk: "high",
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      policyResult.textContent = `Decision: ${data.decision}`;
+    } catch {
+      policyResult.textContent = "Policy evaluation failed";
+    }
   });
 }
 

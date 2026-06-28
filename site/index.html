@@ -201,6 +201,41 @@
   --claimed-model "Claude Sonnet 4.5" \
   --use-case coding-agent</code></pre>
           </div>
+
+          <div class="sandbox-panel">
+            <div class="code-head">Stateful local arbiter</div>
+            <div class="sandbox-grid">
+              <label>
+                <span>Task</span>
+                <input id="sessionTask" type="text" value="Fix npm build safely" />
+              </label>
+              <button class="secondary-btn" id="startSessionBtn" type="button">Start session</button>
+              <div class="session-meta" id="sessionMeta">No local session yet</div>
+            </div>
+
+            <div class="grant-grid">
+              <button class="ghost-btn grant-btn" data-grant="env_read" type="button">Grant .env read</button>
+              <button class="ghost-btn grant-btn" data-grant="config_write" type="button">Grant config write</button>
+            </div>
+
+            <div class="sandbox-grid">
+              <label>
+                <span>Action kind</span>
+                <div class="segmented" id="policyKind">
+                  <button type="button" data-value="file-read" class="active">File read</button>
+                  <button type="button" data-value="command">Command</button>
+                  <button type="button" data-value="outbound-send">Outbound send</button>
+                  <button type="button" data-value="file-write">File write</button>
+                </div>
+              </label>
+              <label>
+                <span>Target</span>
+                <input id="policyTarget" type="text" value=".env" />
+              </label>
+              <button class="primary-btn" id="policyEvalBtn" type="button">Evaluate policy</button>
+              <div class="policy-result" id="policyResult">Decision will appear here</div>
+            </div>
+          </div>
         </div>
       </section>
 

@@ -18,10 +18,12 @@ use tokio::sync::Semaphore;
 
 use crate::deep_scan;
 use crate::certify;
+use crate::policy::{self, Action, ActionKind, Decision, ProviderRisk};
 use crate::registry::{self, Registry};
 use crate::scan;
 use crate::score;
 use crate::secure::Secret;
+use crate::session;
 
 #[derive(Clone)]
 pub struct WebConfig {
@@ -33,6 +35,7 @@ pub struct WebConfig {
 struct AppState {
     site_dir: PathBuf,
     scan_slots: Arc<Semaphore>,
+    session_root: PathBuf,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,6 +67,31 @@ pub struct VerifyRequest {
     pub signing_key: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SessionInitRequest {
+    pub task: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SessionGrantRequest {
+    pub session_id: String,
+    pub name: String,
+    pub value: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SessionShowRequest {
+    pub session_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PolicyEvalRequest {
+    pub session_id: String,
+    pub action_kind: String,
+    pub target: String,
+    pub provider_risk: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub ok: bool,
@@ -74,6 +102,7 @@ pub async fn run(cfg: WebConfig) -> anyhow::Result<()> {
     let state = Arc::new(AppState {
         site_dir: cfg.site_dir,
         scan_slots: Arc::new(Semaphore::new(2)),
+        session_root: session::default_root(),
     });
 
     let app = router(state);
@@ -92,6 +121,10 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/score", post(run_score))
         .route("/api/verify", post(run_verify))
         .route("/api/registry", get(list_registry))
+        .route("/api/session/init", post(init_session))
+        .route("/api/session/show", post(show_session))
+        .route("/api/session/grant", post(grant_session))
+        .route("/api/policy/evaluate", post(eval_policy))
         .route("/", get(index))
         .route("/styles.css", get(styles))
         .route("/app.js", get(app_js))
@@ -181,6 +214,62 @@ async fn list_registry() -> Result<Json<Registry>, ApiError> {
     let path = registry::default_registry_path();
     let reg = Registry::load(&path).map_err(ApiError::from_anyhow)?;
     Ok(Json(reg))
+}
+
+async fn init_session(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<SessionInitRequest>,
+) -> Result<Json<session::SessionState>, ApiError> {
+    if req.task.trim().is_empty() {
+        return Err(ApiError::message("task is required"));
+    }
+    let sess = session::new(&req.task);
+    session::save(&state.session_root, &sess).map_err(ApiError::from_anyhow)?;
+    Ok(Json(sess))
+}
+
+async fn show_session(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<SessionShowRequest>,
+) -> Result<Json<session::SessionState>, ApiError> {
+    let sess = session::load(&state.session_root, &req.session_id).map_err(ApiError::from_anyhow)?;
+    Ok(Json(sess))
+}
+
+async fn grant_session(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<SessionGrantRequest>,
+) -> Result<Json<session::SessionState>, ApiError> {
+    let mut sess = session::load(&state.session_root, &req.session_id).map_err(ApiError::from_anyhow)?;
+    session::set_grant(&mut sess, &req.name, req.value);
+    session::save(&state.session_root, &sess).map_err(ApiError::from_anyhow)?;
+    Ok(Json(sess))
+}
+
+#[derive(Debug, Serialize)]
+struct PolicyEvalResponse {
+    decision: Decision,
+}
+
+async fn eval_policy(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<PolicyEvalRequest>,
+) -> Result<Json<PolicyEvalResponse>, ApiError> {
+    let sess = session::load(&state.session_root, &req.session_id).map_err(ApiError::from_anyhow)?;
+    let provider_risk = match req.provider_risk.as_deref().unwrap_or("medium").to_lowercase().as_str() {
+        "low" => ProviderRisk::Low,
+        "high" => ProviderRisk::High,
+        _ => ProviderRisk::Medium,
+    };
+    let kind = match req.action_kind.to_lowercase().as_str() {
+        "file-read" => ActionKind::FileRead { path: req.target },
+        "file-write" => ActionKind::FileWrite { path: req.target },
+        "command" => ActionKind::Command { command: req.target },
+        "outbound-send" => ActionKind::OutboundSend { label: req.target },
+        _ => return Err(ApiError::message("unknown action_kind")),
+    };
+    let decision = policy::evaluate(&sess, &Action { kind, provider_risk });
+    Ok(Json(PolicyEvalResponse { decision }))
 }
 
 fn validate_base_url(url: &str) -> Result<(), ApiError> {
@@ -282,6 +371,7 @@ mod tests {
         let state = Arc::new(AppState {
             site_dir: PathBuf::from("site"),
             scan_slots: Arc::new(Semaphore::new(2)),
+            session_root: std::env::temp_dir().join("carapace-test-sessions"),
         });
         let app = router(state);
         let response = app
@@ -296,6 +386,7 @@ mod tests {
         let state = Arc::new(AppState {
             site_dir: PathBuf::from("site"),
             scan_slots: Arc::new(Semaphore::new(2)),
+            session_root: std::env::temp_dir().join("carapace-test-sessions"),
         });
         let app = router(state);
         let body = serde_json::json!({"base_url": "", "api_key": null}).to_string();
@@ -311,5 +402,31 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn session_init_returns_session_id() {
+        let root = std::env::temp_dir().join("carapace-web-sessions");
+        let _ = std::fs::remove_dir_all(&root);
+        let state = Arc::new(AppState {
+            site_dir: PathBuf::from("site"),
+            scan_slots: Arc::new(Semaphore::new(2)),
+            session_root: root.clone(),
+        });
+        let app = router(state);
+        let body = serde_json::json!({"task": "fix npm build"}).to_string();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/session/init")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

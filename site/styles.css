@@ -377,6 +377,42 @@ body {
   line-height: 1.7;
 }
 
+.sandbox-panel {
+  margin-top: 22px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(3, 8, 12, 0.75);
+}
+
+.sandbox-grid {
+  display: grid;
+  gap: 14px;
+  padding: 18px 16px;
+}
+
+.grant-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 0 16px 4px;
+}
+
+.session-meta,
+.policy-result {
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 12px 14px;
+  color: #c8d4de;
+  background: rgba(255,255,255,0.03);
+  line-height: 1.5;
+}
+
+.grant-btn.active-grant {
+  background: rgba(116, 227, 255, 0.08);
+  border-color: rgba(116, 227, 255, 0.2);
+}
+
 .monitor-grid {
   display: grid;
   grid-template-columns: 0.9fr 1.1fr;
