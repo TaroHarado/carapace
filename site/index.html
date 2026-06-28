@@ -14,6 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
+    <link rel="icon" type="image/png" href="./assets/logo_1safe.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -22,8 +23,13 @@
     <header class="masthead frame">
       <div class="brandbar">
         <div class="wordmark-block">
-          <div class="wordmark">SafeRouter.io</div>
-          <div class="strap">Trust routing for third-party LLM endpoints</div>
+          <div class="brand-stack">
+            <img class="brand-logo" src="./assets/logo_1safe.png" alt="SafeRouter logo" />
+            <div>
+              <div class="wordmark">SafeRouter.io</div>
+              <div class="strap">Trust routing for third-party LLM endpoints</div>
+            </div>
+          </div>
         </div>
         <div class="rail-links">
           <a href="#scan-floor">Scanner</a>
@@ -264,5 +270,39 @@
     </main>
 
     <script src="./app.js"></script>
+    <script>
+      (function () {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = './assets/logo_1safe.png';
+        img.onload = function () {
+          const size = 256;
+          const r = 60;
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+
+          ctx.beginPath();
+          ctx.moveTo(r, 0);
+          ctx.lineTo(size - r, 0);
+          ctx.quadraticCurveTo(size, 0, size, r);
+          ctx.lineTo(size, size - r);
+          ctx.quadraticCurveTo(size, size, size - r, size);
+          ctx.lineTo(r, size);
+          ctx.quadraticCurveTo(0, size, 0, size - r);
+          ctx.lineTo(0, r);
+          ctx.quadraticCurveTo(0, 0, r, 0);
+          ctx.closePath();
+          ctx.clip();
+
+          ctx.drawImage(img, 0, 0, size, size);
+          const href = canvas.toDataURL('image/png');
+          const icon = document.querySelector('link[rel="icon"]');
+          if (icon) icon.href = href;
+        };
+      })();
+    </script>
   </body>
 </html>
