@@ -4,6 +4,7 @@
 //! reassembles SSE streams, scans for prompt-injection / tool-use abuse,
 //! alerts or blocks. Memory-safe key handling, crash-isolated core.
 
+pub mod audit;
 pub mod cli;
 pub mod feed;
 pub mod inspect;
@@ -13,6 +14,7 @@ pub mod proxy;
 pub mod record;
 pub mod scan;
 pub mod secure;
+pub mod sentinel;
 pub mod tools;
 
 pub use cli::{Cli, Commands};

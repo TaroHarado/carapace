@@ -27,7 +27,7 @@ use crate::cli::Mode;
 use crate::inspect::Inspector;
 use crate::protocol::anthropic;
 use crate::protocol::{self, Event, ProtocolAdapter};
-use crate::record::Recorder;
+use crate::record::{EncryptedForensics, Recorder};
 use crate::secure::Secret;
 
 pub struct ProxyConfig {
@@ -36,6 +36,7 @@ pub struct ProxyConfig {
     pub upstream_key: Secret,
     pub mode: Mode,
     pub recorder: Arc<Recorder>,
+    pub forensics: Option<Arc<EncryptedForensics>>,
 }
 
 pub async fn run(cfg: ProxyConfig) -> anyhow::Result<()> {

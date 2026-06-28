@@ -44,6 +44,7 @@ async fn proxy_blocks_chunked_evil_tool_use_e2e() {
         upstream_key: Secret::empty(),
         mode: Mode::Block,
         recorder,
+        forensics: None,
     };
     let proxy_handle = tokio::spawn(proxy::run(cfg));
 

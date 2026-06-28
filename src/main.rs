@@ -6,11 +6,13 @@ use anyhow::Context;
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
+use carapace::audit;
 use carapace::cli::{Cli, Commands, Mode};
 use carapace::proxy::{self, ProxyConfig};
-use carapace::record::Recorder;
+use carapace::record::{EncryptedForensics, Recorder};
 use carapace::scan;
 use carapace::secure::Secret;
+use carapace::sentinel;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -26,6 +28,8 @@ async fn main() -> anyhow::Result<()> {
             log,
             rules: _,
             blocklist: _,
+            forensics,
+            forensics_pass,
         } => {
             let listen_addr: SocketAddr = listen
                 .parse()
@@ -35,12 +39,24 @@ async fn main() -> anyhow::Result<()> {
                 None => Secret::empty(),
             };
             let recorder = Recorder::open(&log).context("open log")?;
+            let forensics = match (forensics, forensics_pass) {
+                (Some(path), Some(pass)) => Some(std::sync::Arc::new(
+                    EncryptedForensics::open(
+                        path.to_str().unwrap_or(""),
+                        &pass,
+                    )
+                    .context("open forensics store")?,
+                )),
+                (Some(_), None) => anyhow::bail!("--forensics requires --forensics-pass"),
+                (None, _) => None,
+            };
             let cfg = ProxyConfig {
                 upstream,
                 listen: listen_addr,
                 upstream_key: key,
                 mode,
                 recorder: std::sync::Arc::new(recorder),
+                forensics,
             };
             proxy::run(cfg).await
         }
@@ -60,12 +76,29 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Commands::Audit => {
-            eprintln!("cape audit: host IoC scan not implemented in v0.1.0");
+            let report = audit::run();
+            eprintln!("platform: {}", report.platform);
+            eprintln!("risk: {} — {}", report.risk_score, report.verdict);
+            if report.findings.is_empty() {
+                eprintln!("no indicators matched");
+            } else {
+                for f in &report.findings {
+                    eprintln!("[{}] {} (sev={})", f.category, f.detail, f.severity);
+                }
+            }
+            if report.risk_score >= 60 {
+                std::process::exit(2);
+            }
             Ok(())
         }
         Commands::Sentinel { interval } => {
-            eprintln!("cape sentinel: background monitor not implemented in v0.1.0 (interval={interval})");
-            Ok(())
+            let dur = sentinel::parse_interval(&interval)
+                .with_context(|| format!("invalid --interval `{interval}`"))?;
+            sentinel::run(carapace::sentinel::SentinelConfig {
+                interval: dur,
+                max_rounds: None,
+            })
+            .await
         }
     }
 }

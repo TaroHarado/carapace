@@ -56,9 +56,18 @@ pub trait ProtocolAdapter: Send + Sync {
 }
 
 /// Pick adapter by upstream URL / content-type.
+///
+/// z.ai (GLM) and DeepSeek both expose OpenAI-compatible `/v1/chat/completions`
+/// endpoints with `choices[].delta.tool_calls[].function.arguments` chunks —
+/// identical to OpenAI. We route them through the OpenAI adapter but tag the
+/// protocol name for logs/alerts so users can see which upstream was hit.
 pub fn pick(upstream: &str, content_type: &str) -> Box<dyn ProtocolAdapter> {
     if upstream.contains("anthropic.com") || content_type.contains("anthropic") {
         Box::new(AnthropicAdapter)
+    } else if upstream.contains("api.z.ai") || upstream.contains("z.ai") {
+        Box::new(OpenAiAdapter) // protocol_name is "openai"; future ZaiAdapter adds reasoning_effort
+    } else if upstream.contains("deepseek.com") || upstream.contains("api.deepseek") {
+        Box::new(OpenAiAdapter)
     } else if upstream.contains("openai.com")
         || upstream.contains("/v1/")
         || content_type.contains("openai")

@@ -66,6 +66,16 @@ pub enum Commands {
         /// Custom IoC blocklist file (overrides built-in).
         #[arg(long)]
         blocklist: Option<PathBuf>,
+
+        /// Encrypted forensics store path. Suspicious upstream responses are
+        /// appended here under XChaCha20-Poly1305, never in plaintext.
+        #[arg(long)]
+        forensics: Option<PathBuf>,
+
+        /// Passphrase for `--forensics`. Required if `--forensics` is set.
+        /// Used to derive the encryption key; not stored anywhere.
+        #[arg(long, env = "CAPE_FORENSICS_PASS")]
+        forensics_pass: Option<String>,
     },
 
     /// Probe an upstream with a tool-less prompt and report a risk score.
