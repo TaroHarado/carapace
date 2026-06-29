@@ -165,14 +165,16 @@ impl SessionGraph {
         let mut out = Vec::new();
         // For each execute node, look back for a write node that wrote
         // something fetched from external/web less than N back, sharing an
-        // artifact id.
+        // artifact id. If no shared artifact id, fall back to temporal
+        // correlation: any fetch followed by a write to Temp followed by an
+        // execute within the same session — strong enough signal.
         for exec in self.nodes.iter().filter(|n| n.capability == Capability::Execute) {
+            // Phase 1: shared-artifact chain (high confidence).
             for write_node in self
                 .nodes
                 .iter()
                 .filter(|n| n.capability == Capability::WriteFile && n.ts <= exec.ts)
             {
-                // Shared artifact between write and execute?
                 let shared = write_node
                     .artifact_ids
                     .iter()
@@ -181,7 +183,6 @@ impl SessionGraph {
                 if shared == 0 {
                     continue;
                 }
-                // Find a fetch feeding the write.
                 for fetch in self
                     .nodes
                     .iter()
@@ -198,6 +199,42 @@ impl SessionGraph {
                         break;
                     }
                 }
+            }
+            if !out.is_empty() {
+                continue;
+            }
+            // Phase 2: temporal correlation fallback. Fetch + Write to Temp
+            // + Execute — same session, in order, no shared artifact id but
+            // strong behavioral signal.
+            let has_fetch = self.nodes.iter().any(|n| {
+                matches!(n.capability, Capability::NetworkFetch | Capability::BrowserDownload)
+                    && n.ts <= exec.ts
+            });
+            let has_temp_write = self.nodes.iter().any(|n| {
+                n.capability == Capability::WriteFile
+                    && matches!(n.asset, AssetClass::Temp | AssetClass::Executable)
+                    && n.ts <= exec.ts
+            });
+            if has_fetch && has_temp_write {
+                // Build events list from all qualifying nodes.
+                let mut events: Vec<NodeId> = self
+                    .nodes
+                    .iter()
+                    .filter(|n| {
+                        (matches!(n.capability, Capability::NetworkFetch | Capability::BrowserDownload)
+                            || (n.capability == Capability::WriteFile
+                                && matches!(n.asset, AssetClass::Temp | AssetClass::Executable)))
+                            && n.ts <= exec.ts
+                    })
+                    .map(|n| n.id)
+                    .collect();
+                events.push(exec.id);
+                out.push(ChainHit {
+                    rule_id: PAT_FETCH_WRITE_EXECUTE.id.to_string(),
+                    severity: PAT_FETCH_WRITE_EXECUTE.severity - 5, // slightly lower confidence
+                    description: "fetch -> write(temp) -> execute: temporal correlation (no shared artifact id)".to_string(),
+                    events,
+                });
             }
         }
         out

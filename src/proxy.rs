@@ -23,10 +23,12 @@ use hyper_util::rt::TokioIo;
 use tokio::sync::mpsc;
 
 use crate::cli::Mode;
+use crate::defense::{DefenseDecision, DefenseEngine, ToolUseObservation};
 use crate::inspect::{Inspector, Rules};
 use crate::judge::{self, JudgeConfig};
 use crate::protocol::anthropic;
 use crate::protocol::{self, Event};
+use crate::quarantine::QuarantineStore;
 use crate::record::{EncryptedForensics, Recorder};
 use crate::secure::Secret;
 
@@ -39,6 +41,11 @@ pub struct ProxyConfig {
     pub forensics: Option<Arc<EncryptedForensics>>,
     pub rules: Arc<Rules>,
     pub judge: Option<Arc<JudgeConfig>>,
+    /// SafeRouter defense engine (provenance + matrix + session graph).
+    /// None = degraded mode (regex-only, like pre-v2).
+    pub defense: Option<Arc<DefenseEngine>>,
+    /// Quarantine pipeline for downloads. None = no quarantine.
+    pub quarantine: Option<Arc<QuarantineStore>>,
 }
 
 pub async fn run(cfg: ProxyConfig) -> anyhow::Result<()> {
@@ -52,6 +59,8 @@ pub async fn run(cfg: ProxyConfig) -> anyhow::Result<()> {
     let forensics = cfg.forensics.clone();
     let rules = cfg.rules.clone();
     let judge = cfg.judge.clone();
+    let defense = cfg.defense.clone().unwrap_or_else(|| Arc::new(DefenseEngine::with_default_provenance()));
+    let quarantine = cfg.quarantine.clone();
 
     loop {
         let (stream, peer) = match listener.accept().await {
@@ -70,6 +79,8 @@ pub async fn run(cfg: ProxyConfig) -> anyhow::Result<()> {
             forensics: forensics.clone(),
             rules: rules.clone(),
             judge: judge.clone(),
+            defense: defense.clone(),
+            quarantine: quarantine.clone(),
         });
         tokio::spawn(async move {
             if let Err(e) = http1::Builder::new()
@@ -101,6 +112,8 @@ struct ForwardCtx {
     forensics: Option<Arc<EncryptedForensics>>,
     rules: Arc<Rules>,
     judge: Option<Arc<JudgeConfig>>,
+    defense: Arc<DefenseEngine>,
+    quarantine: Option<Arc<QuarantineStore>>,
 }
 
 async fn forward(
@@ -169,7 +182,7 @@ async fn forward(
     let resp_bytes = upstream_resp.bytes().await?;
 
     let allowed_tools = parse_declared_tools(&body_bytes, protocol_name);
-    let inspector = Inspector::from_rules(&fwd.rules, allowed_tools);
+    let inspector = Inspector::from_rules(&fwd.rules, allowed_tools.clone());
 
     let (tx, rx) = mpsc::channel::<Chunk>(64);
     let recorder_cloned = fwd.recorder.clone();
@@ -184,6 +197,9 @@ async fn forward(
         recorder: recorder_cloned,
         forensics: fwd.forensics.clone(),
         judge: fwd.judge.clone(),
+        defense: fwd.defense.clone(),
+        quarantine: fwd.quarantine.clone(),
+        allowed_tools: allowed_tools.clone(),
     };
     tokio::spawn(inspect_and_forward(event_stream, tx, ctx));
 
@@ -206,6 +222,9 @@ struct InspectCtx {
     recorder: Arc<Recorder>,
     forensics: Option<Arc<EncryptedForensics>>,
     judge: Option<Arc<JudgeConfig>>,
+    defense: Arc<DefenseEngine>,
+    quarantine: Option<Arc<QuarantineStore>>,
+    allowed_tools: HashSet<String>,
 }
 
 async fn inspect_and_forward(
@@ -219,6 +238,7 @@ async fn inspect_and_forward(
     let tx = tx;
     let mut tool_buf: Vec<Bytes> = Vec::new();
     let mut tool_input = String::new();
+    let mut tool_name: String = String::new();
     let mut tool_index: u32 = 0;
     let mut text_buf = String::new();
     let mut blocked_count = 0u32;
@@ -267,6 +287,7 @@ async fn inspect_and_forward(
             Event::ToolUseStart { id, name } => {
                 tool_buf.clear();
                 tool_input.clear();
+                tool_name = name.clone();
                 tool_buf.push(tool_start_frame(&Event::ToolUseStart { id, name }, ctx.protocol.as_str(), tool_index));
                 ctx.inspector.reset();
             }
@@ -288,7 +309,75 @@ async fn inspect_and_forward(
                         }
                     }
                 }
-                let is_malicious = !verdict.is_clean() && effective_severity >= 60;
+
+                // ----- SafeRouter defense engine evaluation -------------------
+                //
+                // Layer 1+2+3 merge: build an observation from the reassembled
+                // tool_use, run it through the defense engine (provenance +
+                // matrix + session graph), and merge the result with the
+                // regex-based inspector verdict.
+                let unsolicited = !ctx.allowed_tools.contains(&tool_name);
+                let primary_target = extract_primary_target(&tool_name, &tool_input);
+                let obs = ToolUseObservation {
+                    tool_name: tool_name.clone(),
+                    input: tool_input.clone(),
+                    unsolicited,
+                    primary_target: primary_target.clone(),
+                };
+                let defense_report = ctx.defense.evaluate(&obs);
+
+                // If defense says Quarantine and we have a quarantine store,
+                // divert the write payload there instead of forwarding.
+                let mut quarantined = false;
+                if matches!(ctx.mode, Mode::Block)
+                    && defense_report.decision == DefenseDecision::Quarantine
+                {
+                    if let Some(store) = &ctx.quarantine {
+                        match store.intake(&primary_target, tool_input.as_bytes()) {
+                            Ok(entry) => {
+                                quarantined = true;
+                                tracing::warn!(
+                                    rule = "quarantine",
+                                    sha256 = %entry.sha256,
+                                    original = %entry.original_path,
+                                    stored = %entry.stored_path.display(),
+                                    "artifact quarantined; tool_use substituted"
+                                );
+                                matched_categories.push(format!(
+                                    "quarantine:{}", entry.sha256
+                                ));
+                                if effective_severity < 70 {
+                                    effective_severity = 70;
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(error=%e, "quarantine intake failed, falling back to block");
+                            }
+                        }
+                    }
+                }
+
+                // If the target path is currently in quarantine, block the
+                // execute outright — the file isn't where the agent thinks.
+                let blocked_by_quarantine = matches!(ctx.mode, Mode::Block)
+                    && matches!(defense_report.capability, crate::asset::Capability::Execute)
+                    && ctx
+                        .quarantine
+                        .as_ref()
+                        .map(|q| q.is_quarantined(&primary_target))
+                        .unwrap_or(false);
+
+                let defense_blocks = matches!(ctx.mode, Mode::Block)
+                    && matches!(
+                        defense_report.decision,
+                        DefenseDecision::Block | DefenseDecision::Quarantine
+                    );
+
+                let is_malicious =
+                    (!verdict.is_clean() && effective_severity >= 60)
+                        || defense_blocks
+                        || blocked_by_quarantine;
+
                 if !verdict.is_clean() && effective_severity > max_severity {
                     max_severity = effective_severity;
                     matched_categories.extend(verdict.matched.iter().cloned());
@@ -296,12 +385,34 @@ async fn inspect_and_forward(
                         matched_categories.push("llm-judge-escalated".to_string());
                     }
                 }
-                if matches!(ctx.mode, Mode::Block) && is_malicious {
+                if !defense_report.reasons.is_empty() {
+                    for r in &defense_report.reasons {
+                        matched_categories.push(format!("defense:{r}"));
+                    }
+                    if defense_report.decision as u32 >= DefenseDecision::Ask as u32 && max_severity < 70 {
+                        max_severity = 70;
+                    }
+                }
+                for hit in &defense_report.chain_hits {
+                    matched_categories.push(format!("chain:{}", hit.rule_id));
+                    if hit.severity > max_severity {
+                        max_severity = hit.severity;
+                    }
+                }
+
+                if matches!(ctx.mode, Mode::Block) && (is_malicious || quarantined || blocked_by_quarantine) {
                     blocked_count += 1;
                     if let Some(store) = &ctx.forensics {
                         let _ = store.record("blocked-tool-use", tool_input.as_bytes());
                     }
-                    for b in blocked_tool_substitution(ctx.protocol.as_str(), tool_index) {
+                    let stub_msg = if quarantined {
+                        "[carapace: artifact quarantined — review at ~/.carapace/quarantine/]"
+                    } else if blocked_by_quarantine {
+                        "[carapace: target path is in quarantine — release it first]"
+                    } else {
+                        "[carapace: blocked tool_use with high-severity injection]"
+                    };
+                    for b in blocked_tool_substitution_with_msg(ctx.protocol.as_str(), tool_index, stub_msg) {
                         let _ = tx.send(Ok(b)).await;
                     }
                 } else {
@@ -379,11 +490,87 @@ fn tool_end_frame(protocol: &str, index: u32) -> Bytes {
     }
 }
 
-fn blocked_tool_substitution(protocol: &str, index: u32) -> Vec<Bytes> {
+/// Build a blocked-tool-use substitution with a custom stub message
+/// (for quarantine / targeted-block reasons).
+fn blocked_tool_substitution_with_msg(protocol: &str, index: u32, msg: &str) -> Vec<Bytes> {
+    // For anthropic, we synthesize a text-only block replacement.
+    // For openai, we use the existing stub but prepend the custom message.
     match protocol {
-        "anthropic" => anthropic::blocked_tool_substitution(index),
+        "anthropic" => {
+            // Build a text-delta + content_block_stop sequence with the
+            // custom message as the text payload.
+            let mut out = Vec::new();
+            let start = format!(
+                "event: content_block_start\ndata: {{\"type\":\"content_block_start\",\"index\":{index},\"content_block\":{{\"type\":\"text\",\"text\":\"\"}}}}\n\n"
+            );
+            let delta = format!(
+                "event: content_block_delta\ndata: {{\"type\":\"content_block_delta\",\"index\":{index},\"delta\":{{\"type\":\"text_delta\",\"text\":{msg_json}}}}}\n\n",
+                msg_json = serde_json::to_string(msg).unwrap_or_else(|_| "\"\"".into())
+            );
+            let stop = format!(
+                "event: content_block_stop\ndata: {{\"type\":\"content_block_stop\",\"index\":{index}}}\n\n"
+            );
+            out.push(Bytes::from(start));
+            out.push(Bytes::from(delta));
+            out.push(Bytes::from(stop));
+            out
+        }
         _ => crate::protocol::openai::blocked_tool_substitution(index),
     }
+}
+
+/// Extract the primary target (path / URL / command first token) from a
+/// reassembled tool_use input. Used for asset classification + provenance
+/// keying without a full schema parser.
+fn extract_primary_target(tool_name: &str, input: &str) -> String {
+    let lower = tool_name.to_lowercase();
+    let trimmed = input.trim();
+    // For shell tools: take the first non-flag token.
+    if matches!(lower.as_str(), "bash" | "shell" | "exec" | "execute" | "run" | "terminal") {
+        // Look for the first URL or file path in the command.
+        for token in trimmed.split_whitespace() {
+            if token.starts_with("http://") || token.starts_with("https://") {
+                return token.to_string();
+            }
+        }
+        for token in trimmed.split_whitespace() {
+            if token.starts_with('/') || token.starts_with("./") || token.starts_with("../")
+                || token.starts_with('~') || token.contains("/tmp/")
+                || token.contains("/var/tmp/")
+            {
+                return token.trim_matches(|c: char| !c.is_alphanumeric() && c != '/' && c != '.' && c != '~' && c != '-' && c != '_').to_string();
+            }
+        }
+        return trimmed.split_whitespace().next().unwrap_or(trimmed).to_string();
+    }
+    // For read/write: input is often a JSON path string or a bare path.
+    if matches!(lower.as_str(), "read" | "cat" | "view" | "head" | "tail" | "less" | "write" | "edit" | "create" | "patch" | "modify") {
+        // Try JSON parse first: {"path": "..."} or {"file_path": "..."}.
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
+            if let Some(p) = v.get("path").and_then(|x| x.as_str()) {
+                return p.to_string();
+            }
+            if let Some(p) = v.get("file_path").and_then(|x| x.as_str()) {
+                return p.to_string();
+            }
+            if let Some(p) = v.get("path").and_then(|x| x.as_str()) {
+                return p.to_string();
+            }
+        }
+        // Bare path string.
+        return trimmed.split_whitespace().next().unwrap_or(trimmed).trim_matches(|c: char| c == '"' || c == '\'').to_string();
+    }
+    // For web tools: input is a URL.
+    if matches!(lower.as_str(), "webfetch" | "fetch" | "curl" | "wget" | "http" | "websearch" | "search") {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
+            if let Some(u) = v.get("url").and_then(|x| x.as_str()) {
+                return u.to_string();
+            }
+        }
+        return trimmed.split_whitespace().next().unwrap_or(trimmed).to_string();
+    }
+    // Fallback: first token.
+    trimmed.split_whitespace().next().unwrap_or(trimmed).to_string()
 }
 
 type BoxBody = http_body_util::combinators::BoxBody<Bytes, std::convert::Infallible>;

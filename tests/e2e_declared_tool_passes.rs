@@ -45,6 +45,8 @@ async fn declared_tool_use_with_clean_args_is_forwarded() {
         forensics: None,
         rules: std::sync::Arc::new(carapace::inspect::BUILTIN.clone()),
         judge: None,
+        defense: Some(std::sync::Arc::new(carapace::defense::DefenseEngine::degraded())),
+        quarantine: None,
     };
     let proxy_handle = tokio::spawn(proxy::run(cfg));
 

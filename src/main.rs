@@ -67,6 +67,14 @@ async fn main() -> anyhow::Result<()> {
                 (Some(_), None) => anyhow::bail!("--forensics requires --forensics-pass"),
                 (None, _) => None,
             };
+let defense = std::sync::Arc::new(carapace::defense::DefenseEngine::with_default_provenance());
+            let quarantine = match carapace::quarantine::QuarantineStore::open_default() {
+                Ok(q) => Some(std::sync::Arc::new(q)),
+                Err(e) => {
+                    eprintln!("carapace: quarantine store open failed: {e}; running without quarantine pipeline");
+                    None
+                }
+            };
             let cfg = ProxyConfig {
                 upstream,
                 listen: listen_addr,
@@ -76,6 +84,8 @@ async fn main() -> anyhow::Result<()> {
                 forensics,
                 rules: std::sync::Arc::new(loaded_rules),
                 judge,
+                defense: Some(defense),
+                quarantine,
             };
             proxy::run(cfg).await
         }
