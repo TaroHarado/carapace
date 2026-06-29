@@ -18,6 +18,7 @@ use tokio::sync::Semaphore;
 
 use crate::deep_scan;
 use crate::certify;
+use crate::enforcement;
 use crate::history;
 use crate::judge;
 use crate::policy::{self, Action, ActionKind, Decision, ProviderRisk};
@@ -100,6 +101,20 @@ pub struct HistoryQuery {
     pub host: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SessionModeRequest {
+    pub session_id: String,
+    pub mode: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EnforcementEvalRequest {
+    pub session_id: String,
+    pub action_kind: String,
+    pub target: String,
+    pub provider_risk: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub ok: bool,
@@ -135,7 +150,9 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/session/init", post(init_session))
         .route("/api/session/show", post(show_session))
         .route("/api/session/grant", post(grant_session))
+        .route("/api/session/mode", post(set_session_mode))
         .route("/api/policy/evaluate", post(eval_policy))
+        .route("/api/enforcement/evaluate", post(eval_enforcement))
         .route("/", get(index))
         .route("/styles.css", get(styles))
         .route("/app.js", get(app_js))
@@ -280,6 +297,44 @@ async fn grant_session(
     session::set_grant(&mut sess, &req.name, req.value);
     session::save(&state.session_root, &sess).map_err(ApiError::from_anyhow)?;
     Ok(Json(sess))
+}
+
+async fn set_session_mode(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<SessionModeRequest>,
+) -> Result<Json<session::SessionState>, ApiError> {
+    let mut sess = session::load(&state.session_root, &req.session_id).map_err(ApiError::from_anyhow)?;
+    sess.enforcement_mode = match req.mode.to_lowercase().as_str() {
+        "enforce" => session::EnforcementMode::Enforce,
+        "correct" => session::EnforcementMode::Correct,
+        "observe" => session::EnforcementMode::Observe,
+        "off" => session::EnforcementMode::Off,
+        _ => return Err(ApiError::message("unknown mode: enforce / correct / observe / off")),
+    };
+    session::save(&state.session_root, &sess).map_err(ApiError::from_anyhow)?;
+    Ok(Json(sess))
+}
+
+async fn eval_enforcement(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<EnforcementEvalRequest>,
+) -> Result<Json<enforcement::EnforcementOutcome>, ApiError> {
+    let sess = session::load(&state.session_root, &req.session_id).map_err(ApiError::from_anyhow)?;
+    let provider_risk = match req.provider_risk.as_deref().unwrap_or("medium").to_lowercase().as_str() {
+        "low" => ProviderRisk::Low,
+        "high" => ProviderRisk::High,
+        _ => ProviderRisk::Medium,
+    };
+    let kind = match req.action_kind.to_lowercase().as_str() {
+        "file-read" => ActionKind::FileRead { path: req.target },
+        "file-write" => ActionKind::FileWrite { path: req.target },
+        "command" => ActionKind::Command { command: req.target },
+        "outbound-send" => ActionKind::OutboundSend { label: req.target },
+        _ => return Err(ApiError::message("unknown action_kind")),
+    };
+    let action = Action { kind, provider_risk };
+    let outcome = enforcement::evaluate(&sess, &action);
+    Ok(Json(outcome))
 }
 
 #[derive(Debug, Serialize)]

@@ -262,10 +262,16 @@ pub enum Commands {
         action: SessionCmd,
     },
 
-    /// Deterministic local arbiter policy evaluation.
+/// Deterministic local arbiter policy evaluation.
     Policy {
         #[command(subcommand)]
         action: PolicyCmd,
+    },
+
+    /// Unified enforcement engine: evaluate actions with session context.
+    Enforce {
+        #[command(subcommand)]
+        action: EnforceCmd,
     },
 
     /// Generate an Ed25519 keypair for signing certification artifacts / registry feeds.
@@ -309,6 +315,40 @@ pub enum SessionCmd {
 
         #[arg(long, default_value_t = true)]
         value: bool,
+
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+
+    /// Set enforcement mode for a session.
+    Mode {
+        #[arg(long)]
+        session_id: String,
+
+        /// enforce | correct | observe | off
+        #[arg(long)]
+        mode: String,
+
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum EnforceCmd {
+    /// Evaluate an action through the full enforcement engine.
+    Evaluate {
+        #[arg(long)]
+        session_id: String,
+
+        #[arg(long)]
+        action_kind: String,
+
+        #[arg(long)]
+        target: String,
+
+        #[arg(long, default_value = "medium")]
+        provider_risk: String,
 
         #[arg(long)]
         root: Option<PathBuf>,

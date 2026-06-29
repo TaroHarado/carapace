@@ -47,7 +47,7 @@ pub enum FinalDecision {
     ObserveOnly,
 }
 
-/// Run one full arbiter cycle.
+/// Run one full arbiter cycle (deterministic only).
 ///
 /// This is the function a real agent wrapper would call before executing
 /// any command, file read, file write, or outbound send.
@@ -68,6 +68,62 @@ pub fn evaluate(
         corrective_instruction: corrective,
         context_summary: context,
     }
+}
+
+/// Run one full arbiter cycle with optional LLM judge.
+///
+/// If mode = Correct and the action was blocked by policy, this calls the
+/// judge LLM with a compact context package:
+///   - what the user wanted (task)
+///   - what the model tried to do (action)
+///   - why it was blocked (policy decision)
+///   - recent decisions (context history)
+///
+/// The judge then generates a **smart corrective instruction** instead of
+/// the static "Do not attempt this specific action" text.
+///
+/// If judge is not configured, falls back to the static corrective.
+pub async fn evaluate_with_judge(
+    session: &SessionState,
+    action: &Action,
+    judge_cfg: Option<&crate::judge::JudgeConfig>,
+) -> EnforcementOutcome {
+    let mut outcome = evaluate(session, action);
+
+    if matches!(outcome.final_decision, FinalDecision::CorrectAndRetry) {
+        if let Some(cfg) = judge_cfg {
+            let judge_prompt = format!(
+                "You are a security arbiter. An AI coding agent tried to perform an action that was blocked by policy.\n\n\
+                 Task: {}\n\
+                 Action: {:?} on target `{:?}`\n\
+                 Policy decision: {:?}\n\
+                 Recent decisions: {}\n\n\
+                 Generate a short corrective instruction (max 2 sentences) that tells the agent what it should do instead. \
+                 Do not explain the policy. Just give a concrete safe alternative.",
+                session.current_task,
+                action.kind,
+                describe_action(action).1,
+                outcome.policy_decision,
+                outcome.context_summary,
+            );
+
+            if let Ok(judge_verdict) = crate::judge::judge(&judge_prompt, cfg).await {
+                if judge_verdict.is_malicious() {
+                    outcome.corrective_instruction = Some(
+                        format!(
+                            "SafeRouter blocked this action. A secondary semantic arbiter confirmed it as risky.\n{}",
+                            outcome
+                                .corrective_instruction
+                                .clone()
+                                .unwrap_or_else(|| "Do not attempt this specific action again. Find a different safe approach.".to_string())
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    outcome
 }
 
 /// After enforcement, update session with the decision record and event.

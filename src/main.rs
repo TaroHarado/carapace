@@ -10,7 +10,7 @@ use carapace::artifact;
 use carapace::audit;
 use carapace::bundle;
 use carapace::certify;
-use carapace::cli::{ArtifactCmd, Cli, Commands, Mode, PolicyCmd, RegistryCmd, SessionCmd};
+use carapace::cli::{ArtifactCmd, Cli, Commands, EnforceCmd, Mode, PolicyCmd, RegistryCmd, SessionCmd};
 use carapace::deep_scan;
 use carapace::monitor;
 use carapace::policy::{Action, ActionKind, ProviderRisk};
@@ -325,6 +325,20 @@ async fn main() -> anyhow::Result<()> {
                 eprintln!("grant {}={} updated for {}", name, value, session_id);
                 Ok(())
             }
+            SessionCmd::Mode { session_id, mode, root } => {
+                let root = root.unwrap_or_else(session::default_root);
+                let mut state = session::load(&root, &session_id)?;
+                state.enforcement_mode = match mode.to_lowercase().as_str() {
+                    "enforce" => session::EnforcementMode::Enforce,
+                    "correct" => session::EnforcementMode::Correct,
+                    "observe" => session::EnforcementMode::Observe,
+                    "off" => session::EnforcementMode::Off,
+                    _ => anyhow::bail!("unknown mode: enforce / correct / observe / off"),
+                };
+                session::save(&root, &state)?;
+                eprintln!("session {} mode -> {:?}", session_id, state.enforcement_mode);
+                Ok(())
+            }
         },
         Commands::Policy { action } => match action {
             PolicyCmd::Evaluate { session_id, action_kind, target, provider_risk, root } => {
@@ -344,6 +358,34 @@ async fn main() -> anyhow::Result<()> {
                 };
                 let decision = carapace::policy::evaluate(&state, &Action { kind, provider_risk: risk });
                 eprintln!("decision={:?}", decision);
+                Ok(())
+            }
+        },
+        Commands::Enforce { action } => match action {
+            EnforceCmd::Evaluate { session_id, action_kind, target, provider_risk, root } => {
+                let root = root.unwrap_or_else(session::default_root);
+                let mut state = session::load(&root, &session_id)?;
+                let risk = match provider_risk.to_lowercase().as_str() {
+                    "low" => ProviderRisk::Low,
+                    "high" => ProviderRisk::High,
+                    _ => ProviderRisk::Medium,
+                };
+                let kind = match action_kind.to_lowercase().as_str() {
+                    "file-read" => ActionKind::FileRead { path: target.clone() },
+                    "file-write" => ActionKind::FileWrite { path: target.clone() },
+                    "command" => ActionKind::Command { command: target.clone() },
+                    "outbound-send" => ActionKind::OutboundSend { label: target.clone() },
+                    _ => anyhow::bail!("unknown action_kind: {action_kind}"),
+                };
+                let judge_cfg = carapace::judge::from_env();
+                let outcome = carapace::enforcement::evaluate_with_judge(
+                    &state,
+                    &Action { kind, provider_risk: risk },
+                    judge_cfg.as_ref(),
+                ).await;
+                carapace::enforcement::record_outcome(&mut state, &outcome);
+                session::save(&root, &state)?;
+                eprintln!("{}", serde_json::to_string_pretty(&outcome)?);
                 Ok(())
             }
         },
