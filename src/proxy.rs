@@ -328,6 +328,11 @@ async fn inspect_and_forward(
             severity: max_severity,
             unsolicited_tool_use: false,
             tool_name: None,
+            tier: if max_severity > 0 {
+                Some(crate::inspect::SeverityTier::from_severity(max_severity))
+            } else {
+                None
+            },
         },
         &text_buf,
     );

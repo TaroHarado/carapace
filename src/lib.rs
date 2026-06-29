@@ -6,6 +6,9 @@
 
 pub mod audit;
 pub mod artifact;
+pub mod asset;
+pub mod capability_matrix;
+pub mod provenance;
 pub mod bundle;
 pub mod certify;
 pub mod cli;
@@ -25,6 +28,7 @@ pub mod proxy;
 pub mod record;
 pub mod registry;
 pub mod scan;
+pub mod session_graph;
 pub mod score;
 pub mod secure;
 pub mod session;
