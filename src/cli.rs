@@ -281,10 +281,33 @@ pub enum Commands {
         out: PathBuf,
     },
 
-    /// Generate a fully signed demo feed under examples/ or a custom directory.
+/// Generate a fully signed demo feed under examples/ or a custom directory.
     DemoFeed {
         #[arg(long, default_value = "examples/demo-feed")]
         out: PathBuf,
+    },
+
+    /// Run the adversarial fuzzer against the built-in rules. Discovers rule
+    /// gaps via homoglyphs / RTL / base64-split / unicode-whitespace / case
+    /// swap / control chars / synonym substitution. Outputs an evasion
+    /// report and optional auto-generated candidate rules.
+    Fuzz {
+        /// Output format: markdown | json
+        #[arg(long, default_value = "markdown")]
+        format: String,
+
+        /// Optional output file.
+        #[arg(long)]
+        out: Option<PathBuf>,
+
+        /// Write the auto-generated candidate rules to rules/fuzz-generated.json
+        /// instead of just emitting a report.
+        #[arg(long)]
+        apply: bool,
+
+        /// Use a custom rules file instead of the built-in rules.
+        #[arg(long)]
+        rules: Option<PathBuf>,
     },
 }
 

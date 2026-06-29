@@ -11,6 +11,7 @@ pub mod canary;
 pub mod capability_matrix;
 pub mod defense;
 pub mod egress;
+pub mod fuzz;
 pub mod provenance;
 pub mod quarantine;
 pub mod bundle;

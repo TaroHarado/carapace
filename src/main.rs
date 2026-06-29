@@ -542,7 +542,43 @@ let defense = std::sync::Arc::new(carapace::defense::DefenseEngine::with_default
             feed.sign_with_base64_secret(&secret_b64)?;
             std::fs::write(out.join("providers.json"), serde_json::to_string_pretty(&feed)?)?;
 
-            eprintln!("demo feed written -> {}", out.display());
+eprintln!("demo feed written -> {}", out.display());
+            Ok(())
+        }
+        Commands::Fuzz { format, out, apply, rules } => {
+            let loaded_rules = match rules {
+                Some(p) => carapace::inspect::load_from_files(Some(&p), None)?,
+                None => carapace::inspect::BUILTIN.clone(),
+            };
+            let report = carapace::fuzz::fuzz_rules(&loaded_rules);
+            eprintln!(
+                "fuzz: {} rules, {} mutations, {} evasions (coverage {:.1}%)",
+                report.total_rules_fuzzed,
+                report.total_mutations_generated,
+                report.evasions.len(),
+                report.coverage_percent
+            );
+            let rendered = match format.as_str() {
+                "json" => serde_json::to_string_pretty(&report)?,
+                _ => carapace::fuzz::render_markdown(&report),
+            };
+            if apply {
+                let candidate_json = carapace::fuzz::render_candidate_rules_json(&report);
+                let dest = std::path::Path::new("rules/fuzz-generated.json");
+                std::fs::create_dir_all("rules")?;
+                std::fs::write(dest, &candidate_json)?;
+                eprintln!(
+                    "fuzz: wrote {} candidate rules -> {}",
+                    report.evasions.len(),
+                    dest.display()
+                );
+            }
+            if let Some(path) = out {
+                std::fs::write(&path, &rendered)?;
+                eprintln!("fuzz: report written -> {}", path.display());
+            } else {
+                eprintln!("{rendered}");
+            }
             Ok(())
         }
     }
