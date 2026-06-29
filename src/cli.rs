@@ -309,6 +309,55 @@ pub enum Commands {
         #[arg(long)]
         rules: Option<PathBuf>,
     },
+
+    /// Plant decoy credential files / wallet keystores. Any tool_use that
+    /// touches these paths triggers a hard Block. Asymmetric defense — the
+    /// attacker cannot tell decoys from real files.
+    Canary {
+        #[command(subcommand)]
+        action: CanaryCmd,
+    },
+
+    /// Manage the download quarantine pipeline. Quarantined artifacts are
+    /// held in ~/.carapace/quarantine/ for manual review.
+    Quarantine {
+        #[command(subcommand)]
+        action: QuarantineCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum CanaryCmd {
+    /// Plant the default canary set under $HOME (skips paths that already
+    /// have real files).
+    Plant {
+        /// Override $HOME with a custom directory.
+        #[arg(long, env = "HOME")]
+        home: Option<PathBuf>,
+    },
+    /// List currently-planted canaries.
+    List,
+    /// Unplant all canaries (delete the decoy files).
+    Unplant,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum QuarantineCmd {
+    /// List quarantined artifacts.
+    List,
+    /// Release a quarantined artifact by SHA-256 (copies back to original path).
+    Release {
+        /// The SHA-256 of the quarantined artifact to release.
+        #[arg(long)]
+        sha256: String,
+    },
+    /// Permanently delete a quarantined artifact.
+    Purge {
+        #[arg(long)]
+        sha256: String,
+    },
+    /// Unplant all canaries and empty the quarantine store.
+    Clear,
 }
 
 #[derive(Subcommand, Debug)]

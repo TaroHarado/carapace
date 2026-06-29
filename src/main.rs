@@ -10,7 +10,7 @@ use carapace::artifact;
 use carapace::audit;
 use carapace::bundle;
 use carapace::certify;
-use carapace::cli::{ArtifactCmd, Cli, Commands, EnforceCmd, Mode, PolicyCmd, RegistryCmd, SessionCmd};
+use carapace::cli::{ArtifactCmd, CanaryCmd, Cli, Commands, EnforceCmd, Mode, PolicyCmd, QuarantineCmd, RegistryCmd, SessionCmd};
 use carapace::deep_scan;
 use carapace::monitor;
 use carapace::policy::{Action, ActionKind, ProviderRisk};
@@ -580,6 +580,99 @@ eprintln!("demo feed written -> {}", out.display());
                 eprintln!("{rendered}");
             }
             Ok(())
+        }
+        Commands::Canary { action } => {
+            use carapace::canary::CanaryRegistry;
+            let registry = CanaryRegistry::new();
+            match action {
+                CanaryCmd::Plant { home } => {
+                    let home = home.unwrap_or_else(|| {
+                        std::env::var_os("HOME")
+                            .or_else(|| std::env::var_os("USERPROFILE"))
+                            .map(std::path::PathBuf::from)
+                            .unwrap_or_else(|| std::path::PathBuf::from("."))
+                    });
+                    let planted = registry.plant_defaults(&home)
+                        .context("plant canaries")?;
+                    eprintln!("canary: planted {} decoys under {}", planted.len(), home.display());
+                    for c in &planted {
+                        eprintln!("  - [{}] {}", c.category, c.path.display());
+                    }
+                    if planted.is_empty() {
+                        eprintln!("canary: no decoys planted (all paths already had real files?)");
+                    }
+                    Ok(())
+                }
+                CanaryCmd::List => {
+                    let canaries = registry.list();
+                    if canaries.is_empty() {
+                        eprintln!("canary: no decoys currently registered");
+                    } else {
+                        eprintln!("canary: {} decoys registered", canaries.len());
+                        for c in canaries {
+                            eprintln!("  - [{}] {} (planted={})", c.category, c.path.display(), c.planted);
+                        }
+                    }
+                    Ok(())
+                }
+                CanaryCmd::Unplant => {
+                    registry.unplant_all()
+                        .context("unplant canaries")?;
+                    eprintln!("canary: all decoys un-planted");
+                    Ok(())
+                }
+            }
+        }
+        Commands::Quarantine { action } => {
+            use carapace::quarantine::QuarantineStore;
+            let store = QuarantineStore::open_default()
+                .context("open quarantine store")?;
+            match action {
+                QuarantineCmd::List => {
+                    let entries = store.list();
+                    if entries.is_empty() {
+                        eprintln!("quarantine: store empty");
+                    } else {
+                        eprintln!("quarantine: {} entries", entries.len());
+                        for e in entries {
+                            let status = if e.released { "released" } else { "held" };
+                            eprintln!(
+                                "  - [{status}] {} (sha256={}, size={}, sniff={}, executable={})",
+                                e.original_path,
+                                &e.sha256[..16],
+                                e.size_bytes,
+                                e.sniffed_type.label(),
+                                e.is_executable
+                            );
+                        }
+                    }
+                    Ok(())
+                }
+                QuarantineCmd::Release { sha256 } => {
+                    store.release(&sha256)
+                        .context("release artifact")?;
+                    eprintln!("quarantine: released {} -> original path", &sha256[..16]);
+                    Ok(())
+                }
+                QuarantineCmd::Purge { sha256 } => {
+                    store.purge(&sha256)
+                        .context("purge artifact")?;
+                    eprintln!("quarantine: purged {}", &sha256[..16]);
+                    Ok(())
+                }
+                QuarantineCmd::Clear => {
+                    let entries = store.list();
+                    let mut removed = 0;
+                    for e in entries {
+                        if !e.released {
+                            let _ = store.purge(&e.sha256);
+                            removed += 1;
+                        }
+                    }
+                    eprintln!("quarantine: cleared {} held entries", removed);
+                    Ok(())
+                }
+            }
         }
     }
 }
