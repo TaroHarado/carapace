@@ -4,17 +4,18 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Invoke-Step($label, [scriptblock]$action) {
+    & $action
+    if ($LASTEXITCODE -ne 0) {
+        throw "$label failed with exit code $LASTEXITCODE"
+    }
+    Write-Host "${label}: ok"
+}
+
 Write-Host "== cape smoke (windows) =="
-& $BinaryPath --help | Out-Null
-Write-Host "help: ok"
-
-& $BinaryPath audit | Out-Null
-Write-Host "audit: ok"
-
-& $BinaryPath registry list | Out-Null
-Write-Host "registry: ok"
-
-& $BinaryPath score --help | Out-Null
-Write-Host "score: ok"
+Invoke-Step 'help' { & $BinaryPath --help | Out-Null }
+Invoke-Step 'audit' { & $BinaryPath audit | Out-Null }
+Invoke-Step 'registry' { & $BinaryPath registry list | Out-Null }
+Invoke-Step 'score' { & $BinaryPath score --help | Out-Null }
 
 Write-Host "smoke: ok"

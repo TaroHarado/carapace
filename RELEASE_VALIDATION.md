@@ -41,3 +41,8 @@ The local-first beta works end-to-end on a real release binary, not just from
 
 That does **not** replace cross-platform artifact checks from GitHub Actions,
 but it closes the most important local reality gap before public launch.
+
+## Note on tags
+
+If the latest public GitHub release artifact fails smoke, cut a new RC tag.
+Do not trust the age of the tag; trust the smoke result.
