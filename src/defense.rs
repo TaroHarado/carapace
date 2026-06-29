@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 
 use crate::asset::{self, AssetClass, Capability, Source};
+use crate::canary::CanaryRegistry;
 use crate::capability_matrix::{self, MatrixDecision};
 use crate::egress::{self, EgressDecision, EgressPolicy};
 use crate::provenance::ProvenanceStore;
@@ -93,6 +94,8 @@ pub struct DefenseEngine {
     next_node_id: Arc<std::sync::atomic::AtomicU64>,
     /// Egress policy for outbound POST/PUT evaluation.
     egress: EgressPolicy,
+    /// Optional canary registry — planted decoy credentials/wallets.
+    canaries: Option<Arc<CanaryRegistry>>,
 }
 
 impl DefenseEngine {
@@ -102,6 +105,7 @@ impl DefenseEngine {
             graph: Arc::new(Mutex::new(SessionGraph::new())),
             next_node_id: Arc::new(std::sync::atomic::AtomicU64::new(1)),
             egress: EgressPolicy::new(),
+            canaries: None,
         }
     }
 
@@ -128,6 +132,11 @@ impl DefenseEngine {
         self
     }
 
+    pub fn with_canaries(mut self, canaries: Arc<CanaryRegistry>) -> Self {
+        self.canaries = Some(canaries);
+        self
+    }
+
     /// Evaluate a single tool_use observation.
     pub fn evaluate(&self, obs: &ToolUseObservation) -> DefenseReport {
         let asset_class = asset::classify(&obs.primary_target);
@@ -140,6 +149,31 @@ impl DefenseEngine {
         } else {
             Source::User
         };
+
+        // ----- Canary check — Layer 0 (highest priority) ----------------
+        //
+        // If the primary target is a planted decoy, hard Block. This is the
+        // asymmetric advantage: the attacker can't tell canary from real, so
+        // evasion is impossible. The check runs before matrix / egress /
+        // taint because canary hit is unconditional.
+        let canary_hit = self
+            .canaries
+            .as_ref()
+            .and_then(|c| c.check(&obs.primary_target));
+        if let Some(hit) = &canary_hit {
+            let mut reasons: Vec<String> = Vec::new();
+            reasons.push(format!("canary:{} (sev={})", hit.reason, hit.severity));
+            return DefenseReport {
+                decision: DefenseDecision::Block,
+                asset_class,
+                capability,
+                source,
+                tainted: true,
+                matrix_decision: MatrixDecision::Block,
+                chain_hits: Vec::new(),
+                reasons,
+            };
+        }
 
         // Look up / record the artifact in provenance, with parents extracted
         // from the tool_use input content (URLs / paths that this artifact
