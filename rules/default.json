@@ -1,118 +1,106 @@
 {
   "rules": [
-    {
-      "id": "dl-curl-pipe-sh",
-      "category": "download-exec",
-      "pattern": "(?i)curl(?:\\s+https?://[^|\\s]+)?\\s*\\|\\s*(?:sh|bash|zsh|pwsh|ash|dash)",
-      "severity": 95
-    },
-    {
-      "id": "dl-wget-pipe-sh",
-      "category": "download-exec",
-      "pattern": "(?i)wget(?:\\s+https?://[^|\\s]+)?\\s*-O\\s*[^|\\s]+\\s*\\|\\s*(?:sh|bash|zsh|ash|dash)",
-      "severity": 95
-    },
-    {
-      "id": "dl-irm-iex",
-      "category": "download-exec",
-      "pattern": "(?i)irm\\s+https?://[^|\\s]+\\s*\\|\\s*iex",
-      "severity": 95
-    },
-    {
-      "id": "dl-iwr-iex",
-      "category": "download-exec",
-      "pattern": "(?i)iwr\\s+https?://[^|\\s]+\\s*\\|\\s*iex",
-      "severity": 95
-    },
-    {
-      "id": "dl-invoke-webrequest",
-      "category": "download-exec",
-      "pattern": "(?i)Invoke-WebRequest[^|]*\\|\\s*Invoke-Expression",
-      "severity": 95
-    },
-    {
-      "id": "obfusc-base64-pipe",
-      "category": "obfuscation",
-      "pattern": "(?i)(?:base64|b64|openssl)\\s+(?:-d|--decode)\\s*(?:[^|]*\\s*)?\\|\\s*(?:sh|bash|zsh|pwsh)",
-      "severity": 90
-    },
-    {
-      "id": "persist-schtasks",
-      "category": "persistence",
-      "pattern": "(?i)schtasks\\s+/(?:create|register)",
-      "severity": 85
-    },
-    {
-      "id": "persist-launchctl",
-      "category": "persistence",
-      "pattern": "(?i)launchctl\\s+(?:load|bootstrap)",
-      "severity": 85
-    },
-    {
-      "id": "persist-cron-edit",
-      "category": "persistence",
-      "pattern": "(?i)\\(crontab\\s+-l(?:;\\s*echo\\s+[^)]+)?;\\s*crontab\\s*-\\)",
-      "severity": 85
-    },
-    {
-      "id": "persist-systemd-unit-write",
-      "category": "persistence",
-      "pattern": "(?i)\\[Unit\\][^\\[]*\\[Service\\][^\\[]*\\[Install\\]",
-      "severity": 80
-    },
-    {
-      "id": "net-socks5-proxy-env",
-      "category": "network",
-      "pattern": "(?i)(?:ALL_PROXY|HTTP_PROXY|HTTPS_PROXY)\\s*=\\s*socks5://",
-      "severity": 80
-    },
-    {
-      "id": "net-iex-env-change",
-      "category": "network",
-      "pattern": "(?i)setx\\s+(?:ALL_PROXY|HTTP_PROXY|HTTPS_PROXY)",
-      "severity": 80
-    },
-    {
-      "id": "net-dns-change",
-      "category": "network",
-      "pattern": "(?i)(?:resolv\\.conf|/etc/resolv\\.conf|nameserver\\s+\\d+\\.\\d+\\.\\d+\\.\\d+)",
-      "severity": 70
-    },
-    {
-      "id": "anti-forensics-journal",
-      "category": "anti-forensics",
-      "pattern": "(?i)(?:journalctl\\s+--vacuum|rm\\s+-rf?\\s+/var/log|rm\\s+-rf?\\s+\\$HOME/\\.bash_history|rm\\s+-rf?\\s+\\$HOME/\\.zsh_history)",
-      "severity": 90
-    },
-    {
-      "id": "anti-forensics-history-unset",
-      "category": "anti-forensics",
-      "pattern": "(?i)unset\\s+HISTFILE",
-      "severity": 60
-    },
-    {
-      "id": "locale-change-unexpected",
-      "category": "locale",
-      "pattern": "(?i)(?:export\\s+)?LANG\\s*=\\s*(?:C|en_US\\.UTF-8)(?:\\sLinux)?\\s*(?:\\n|;|$)",
-      "severity": 30
-    },
-    {
-      "id": "rce-rm-rf-root",
-      "category": "anti-forensics",
-      "pattern": "(?i)rm\\s+-rf?\\s+(?:/|/\\*|\\*/|\\$HOME/?\\s*$)",
-      "severity": 95
-    },
-    {
-      "id": "rce-pyexec-unencoded",
-      "category": "obfuscation",
-      "pattern": "(?i)python3?\\s+-c\\s+['\"]import(?:\\s+os|\\s+urllib|\\s+subprocess)",
-      "severity": 70
-    },
-    {
-      "id": "unobfuscated-c2-fetch",
-      "category": "download-exec",
-      "pattern": "(?i)(?:curl|wget|irm|iwr)\\s+https?://[a-z0-9.-]+\\.(?:ru|cn|tk|xyz|top|info)/[a-z0-9_-]+\\.(?:ps1|sh|exe|dll|bin)",
-      "severity": 85
-    }
+    {"id": "dl-curl-pipe-sh", "category": "download-exec", "pattern": "(?i)curl(?:\\s+https?://[^|\\s]+)?\\s*\\|\\s*(?:sh|bash|zsh|pwsh|ash|dash)", "severity": 95},
+    {"id": "dl-wget-pipe-sh", "category": "download-exec", "pattern": "(?i)wget(?:\\s+https?://[^|\\s]+)?\\s*-O\\s*[^|\\s]+\\s*\\|\\s*(?:sh|bash|zsh|ash|dash)", "severity": 95},
+    {"id": "dl-irm-iex", "category": "download-exec", "pattern": "(?i)irm\\s+https?://[^|\\s]+\\s*\\|\\s*iex", "severity": 95},
+    {"id": "dl-iwr-iex", "category": "download-exec", "pattern": "(?i)iwr\\s+https?://[^|\\s]+\\s*\\|\\s*iex", "severity": 95},
+    {"id": "dl-invoke-webrequest", "category": "download-exec", "pattern": "(?i)Invoke-WebRequest[^|]*\\|\\s*Invoke-Expression", "severity": 95},
+    {"id": "dl-webclient-download", "category": "download-exec", "pattern": "(?i)New-Object\\s+Net\\.WebClient.*Download(?:String|File)", "severity": 85},
+    {"id": "dl-certutil-urlcache", "category": "download-exec", "pattern": "(?i)certutil\\s+-urlcache\\s+-split\\s+https?://", "severity": 90},
+    {"id": "dl-msiexec-url", "category": "download-exec", "pattern": "(?i)msiexec\\s+/i\\s+https?://", "severity": 90},
+    {"id": "dl-mshta-vbscript", "category": "download-exec", "pattern": "(?i)mshta\\s+(?:https?://|vbscript:)", "severity": 90},
+    {"id": "dl-rundll32-js", "category": "download-exec", "pattern": "(?i)rundll32\\s+javascript:", "severity": 90},
+
+    {"id": "obf-base64-pipe", "category": "obfuscation", "pattern": "(?i)(?:base64|b64|openssl)\\s+(?:-d|--decode)\\s*(?:[^|]*\\s*)?\\|\\s*(?:sh|bash|zsh|pwsh)", "severity": 90},
+    {"id": "obf-pyexec-import", "category": "obfuscation", "pattern": "(?i)python3?\\s+-c\\s+['\"]import(?:\\s+os|\\s+urllib|\\s+subprocess)", "severity": 70},
+    {"id": "obf-eval-encoded", "category": "obfuscation", "pattern": "(?i)eval\\s*\\(\\s*(?:atob|Buffer\\.from|base64)", "severity": 85},
+    {"id": "obf-hex-decode-exec", "category": "obfuscation", "pattern": "(?i)(?:xxd|hex)\\s+-r.*\\|\\s*(?:sh|bash)", "severity": 85},
+
+    {"id": "persist-schtasks", "category": "persistence", "pattern": "(?i)schtasks\\s+/(?:create|register)", "severity": 85},
+    {"id": "persist-launchctl", "category": "persistence", "pattern": "(?i)launchctl\\s+(?:load|bootstrap)", "severity": 85},
+    {"id": "persist-cron-edit", "category": "persistence", "pattern": "(?i)\\(crontab\\s+-l(?:;\\s*echo\\s+[^)]+)?;\\s*crontab\\s*-\\)", "severity": 85},
+    {"id": "persist-systemd-unit", "category": "persistence", "pattern": "(?i)\\[Unit\\][^\\[]*\\[Service\\][^\\[]*\\[Install\\]", "severity": 80},
+    {"id": "persist-bashrc", "category": "persistence", "pattern": "(?i)(?:echo|cat).*>>?\\s*~?/?\\.bashrc", "severity": 80},
+    {"id": "persist-zshrc", "category": "persistence", "pattern": "(?i)(?:echo|cat).*>>?\\s*~?/?\\.zshrc", "severity": 80},
+    {"id": "persist-fish-config", "category": "persistence", "pattern": "(?i)(?:echo|cat).*>>?\\s*~?/\\.config/fish/config\\.fish", "severity": 80},
+    {"id": "persist-ps-profile", "category": "persistence", "pattern": "(?i)\\$PROFILE(?:\\s*\\|\\s*Set-Content|\\s*=|Add-Content)", "severity": 80},
+    {"id": "persist-macos-loginitem", "category": "persistence", "pattern": "(?i)defaults\\s+write\\s+loginwindow\\s+AutoLaunched", "severity": 75},
+    {"id": "persist-systemd-run-payload", "category": "persistence", "pattern": "(?i)systemd-run\\s+--unit=.*(?:curl|wget|sh|bash)", "severity": 85},
+
+    {"id": "net-socks5-proxy", "category": "network", "pattern": "(?i)(?:ALL_PROXY|HTTP_PROXY|HTTPS_PROXY)\\s*=\\s*socks5://", "severity": 80},
+    {"id": "net-setx-proxy", "category": "network", "pattern": "(?i)setx\\s+(?:ALL_PROXY|HTTP_PROXY|HTTPS_PROXY)", "severity": 80},
+    {"id": "net-resolv-conf", "category": "network", "pattern": "(?i)(?:resolv\\.conf|/etc/resolv\\.conf|nameserver\\s+\\d+\\.\\d+\\.\\d+\\.\\d+)", "severity": 70},
+    {"id": "net-route-add-default", "category": "network", "pattern": "(?i)route\\s+-p\\s+add\\s+0\\.0\\.0\\.0", "severity": 75},
+
+    {"id": "af-journal-vacuum", "category": "anti-forensics", "pattern": "(?i)journalctl\\s+--vacuum", "severity": 90},
+    {"id": "af-rm-var-log", "category": "anti-forensics", "pattern": "(?i)rm\\s+-rf?\\s+/var/log", "severity": 90},
+    {"id": "af-history-wipe-unset", "category": "anti-forensics", "pattern": "(?i)unset\\s+HISTFILE", "severity": 60},
+    {"id": "af-history-clear", "category": "anti-forensics", "pattern": "(?i)history\\s+-c", "severity": 55},
+    {"id": "af-shred-history", "category": "anti-forensics", "pattern": "(?i)shred\\s+.*\\.bash_history", "severity": 85},
+    {"id": "af-rm-rf-root", "category": "anti-forensics", "pattern": "(?i)rm\\s+-rf?\\s+(?:/|/\\*|\\*/|\\$HOME/?\\s*$)", "severity": 95},
+
+    {"id": "locale-change", "category": "locale", "pattern": "(?i)(?:export\\s+)?LANG\\s*=\\s*(?:C|en_US\\.UTF-8)(?:\\sLinux)?\\s*(?:\\n|;|$)", "severity": 30},
+
+    {"id": "poison-claude-settings", "category": "client-config-poison", "pattern": "(?i)(?:Set-Content|echo|cat|\\>).*\\.claude[/\\\\]settings\\.json", "severity": 90},
+    {"id": "poison-claude-json", "category": "client-config-poison", "pattern": "(?i)(?:Set-Content|echo|cat|\\>).*~?/?\\.claude\\.json", "severity": 90},
+    {"id": "poison-mcp-json", "category": "client-config-poison", "pattern": "(?i)(?:Set-Content|echo|cat|\\>).*\\.mcp\\.json", "severity": 90},
+    {"id": "poison-claude-md", "category": "client-config-poison", "pattern": "(?i)(?:echo|cat).*>>?\\s*(?:CLAUDE|AGENTS)\\.md", "severity": 85},
+    {"id": "poison-cursor-rules", "category": "client-config-poison", "pattern": "(?i)(?:echo|cat).*>>?\\s*\\.cursorrules", "severity": 85},
+    {"id": "poison-pretool-hook", "category": "client-config-poison", "pattern": "(?i)PreToolUse.*(?:curl|wget|sh|bash|iex)", "severity": 95},
+    {"id": "poison-posttool-hook", "category": "client-config-poison", "pattern": "(?i)PostToolUse.*(?:curl|wget|sh|bash|iex)", "severity": 95},
+    {"id": "poison-opencode-config", "category": "client-config-poison", "pattern": "(?i)(?:Set-Content|echo|cat|\\>).*opencode\\.json", "severity": 85},
+    {"id": "poison-aider-config", "category": "client-config-poison", "pattern": "(?i)(?:echo|cat).*>>?\\s*\\.aider(?:conf\\.yml|\\.toml)", "severity": 80},
+
+    {"id": "steal-ssh-key", "category": "credential-read", "pattern": "(?i)cat\\s+~?/?\\.ssh/(?:id_rsa|id_ed25519)(?!\\.pub)", "severity": 95},
+    {"id": "steal-aws-creds", "category": "credential-read", "pattern": "(?i)cat\\s+~?/?\\.aws/credentials", "severity": 95},
+    {"id": "steal-kube-config", "category": "credential-read", "pattern": "(?i)cat\\s+~?/?\\.kube/config", "severity": 95},
+    {"id": "steal-docker-config", "category": "credential-read", "pattern": "(?i)cat\\s+~?/?\\.docker/config\\.json", "severity": 90},
+    {"id": "steal-netrc", "category": "credential-read", "pattern": "(?i)cat\\s+~?/?\\.netrc", "severity": 90},
+    {"id": "steal-env-real", "category": "credential-read", "pattern": "(?i)cat\\s+\\.env(?!\\.example|\\.sample|\\.template)", "severity": 85},
+    {"id": "steal-chrome-login", "category": "credential-read", "pattern": "(?i)(?:Chrome|Google)[/\\\\].*Login\\sData", "severity": 90},
+    {"id": "steal-gcloud-creds", "category": "credential-read", "pattern": "(?i)cat\\s+~?/?\\.config/gcloud/(?:credentials|application_default)\\.json", "severity": 95},
+    {"id": "steal-terraform-tokens", "category": "credential-read", "pattern": "(?i)cat\\s+~?/?\\.terraform\\.d/(?:credentials|terraform\\.rc)", "severity": 90},
+    {"id": "steal-pypirc", "category": "credential-read", "pattern": "(?i)cat\\s+~?/?\\.pypirc", "severity": 80},
+    {"id": "steal-npmrc-token", "category": "credential-read", "pattern": "(?i)cat\\s+~?/?\\.npmrc(?:\\s*\\|.*token|\\s*\\|.*auth)", "severity": 80},
+    {"id": "steal-git-credential", "category": "credential-read", "pattern": "(?i)git\\s+credential\\s+(?:fill|approve|store)", "severity": 75},
+
+    {"id": "exfil-discord-webhook", "category": "exfil-channel", "pattern": "(?i)discord\\.com/api/webhooks", "severity": 90},
+    {"id": "exfil-telegram-bot", "category": "exfil-channel", "pattern": "(?i)api\\.telegram\\.org/bot\\d+", "severity": 90},
+    {"id": "exfil-slack-webhook", "category": "exfil-channel", "pattern": "(?i)hooks\\.slack\\.com/services", "severity": 90},
+    {"id": "exfil-paste-service", "category": "exfil-channel", "pattern": "(?i)(?:0x0\\.st|paste\\.bin|pastebin\\.com|hastebin|dpaste\\.org)", "severity": 75},
+    {"id": "exfil-dns-nslookup", "category": "exfil-channel", "pattern": "(?i)nslookup\\s+\\$\\(", "severity": 85},
+    {"id": "exfil-dnscat", "category": "exfil-channel", "pattern": "(?i)dnscat2?\\s+", "severity": 90},
+    {"id": "exfil-ngrok-tunnel", "category": "exfil-channel", "pattern": "(?i)ngrok\\s+(?:http|tcp)\\s+\\d+", "severity": 75},
+    {"id": "exfil-cloudflared-tunnel", "category": "exfil-channel", "pattern": "(?i)cloudflared\\s+tunnel\\s+--url", "severity": 75},
+
+    {"id": "lolbin-forfiles", "category": "lolbin-exec", "pattern": "(?i)forfiles\\s+/c\\s+\"", "severity": 80},
+    {"id": "lolbin-wmic-create", "category": "lolbin-exec", "pattern": "(?i)wmic\\s+process\\s+call\\s+create", "severity": 80},
+    {"id": "lolbin-addtype-inline", "category": "lolbin-exec", "pattern": "(?i)Add-Type\\s+-TypeDefinition", "severity": 70},
+    {"id": "lolbin-osascript-shell", "category": "lolbin-exec", "pattern": "(?i)osascript\\s+-e\\s+['\"]?do\\s+shell\\s+script", "severity": 85},
+    {"id": "lolbin-installutil", "category": "lolbin-exec", "pattern": "(?i)InstallUtil\\s+/u", "severity": 75},
+    {"id": "lolbin-regasm", "category": "lolbin-exec", "pattern": "(?i)(?:regasm|regsvcs)\\s+/u", "severity": 75},
+
+    {"id": "evade-amsi-bypass", "category": "evasion-edr", "pattern": "(?i)(?:amsiInitFailed|AmsiUtils|patch\\s+amsi)", "severity": 95},
+    {"id": "evade-etw-patch", "category": "evasion-edr", "pattern": "(?i)(?:EtwEventWrite|ntdll.*ETW|patch.*etw)", "severity": 95},
+    {"id": "evade-clm-bypass", "category": "evasion-edr", "pattern": "(?i)LanguageMode.*Constrained|PSv2", "severity": 85},
+    {"id": "evade-wd-disable", "category": "evasion-edr", "pattern": "(?i)Set-MpPreference\\s+-DisableRealtime", "severity": 95},
+
+    {"id": "git-hooks-path", "category": "git-attack", "pattern": "(?i)git\\s+config\\s+core\\.hooksPath", "severity": 90},
+    {"id": "git-hooks-write", "category": "git-attack", "pattern": "(?i)(?:echo|cat).*>>?\\s*\\.git/hooks/", "severity": 85},
+    {"id": "git-remote-seturl", "category": "git-attack", "pattern": "(?i)git\\s+remote\\s+set-url", "severity": 75},
+    {"id": "git-ci-poison", "category": "git-attack", "pattern": "(?i)(?:echo|cat).*>>?\\s*\\.github/workflows/", "severity": 85},
+    {"id": "git-fsmonitor-hook", "category": "git-attack", "pattern": "(?i)git\\s+config\\s+core\\.fsmonitor", "severity": 70},
+
+    {"id": "docker-privileged-mount", "category": "container-breakout", "pattern": "(?i)docker\\s+run\\s+--privileged.*-v\\s+/:/", "severity": 95},
+    {"id": "docker-volume-root", "category": "container-breakout", "pattern": "(?i)docker\\s+run.*-v\\s+/:/(?:host|mnt)", "severity": 90},
+    {"id": "nsenter-pivot", "category": "container-breakout", "pattern": "(?i)nsenter\\s+-t\\s+1\\s+-m", "severity": 90},
+    {"id": "unshare-namespace", "category": "container-breakout", "pattern": "(?i)unshare\\s+--pid\\s+--fork", "severity": 70},
+
+    {"id": "pkg-npm-registry-evil", "category": "pkg-poison", "pattern": "(?i)npm\\s+config\\s+set\\s+registry\\s+https?://(?!registry\\.npmjs\\.org)", "severity": 85},
+    {"id": "pkg-pip-registry-evil", "category": "pkg-poison", "pattern": "(?i)pip\\s+config\\s+set\\s+global\\.index-url\\s+https?://(?!pypi\\.org)", "severity": 85},
+    {"id": "pkg-yarn-registry-evil", "category": "pkg-poison", "pattern": "(?i)yarn\\s+config\\s+set\\s+registry\\s+https?://(?!registry\\.yarnpkg\\.com)", "severity": 80},
+    {"id": "pkg-cargo-registry-evil", "category": "pkg-poison", "pattern": "(?i)cargo\\s+config.*registry.*https?://(?!crates\\.io|static\\.crates\\.io)", "severity": 80},
+
+    {"id": "unobf-c2-fetch-tld", "category": "download-exec", "pattern": "(?i)(?:curl|wget|irm|iwr)\\s+https?://[a-z0-9.-]+\\.(?:ru|cn|tk|xyz|top|info)/[a-z0-9_-]+\\.(?:ps1|sh|exe|dll|bin)", "severity": 85}
   ]
 }
