@@ -6,6 +6,7 @@
 - [ ] Wait for GitHub Actions `release.yml` to finish
 - [ ] Download at least one built artifact from the release page and smoke test it
 - [ ] Verify `cargo binstall carapace` works against the release
+- [ ] Run `scripts/capture-demo.ps1` or `scripts/capture-demo.sh` to generate desktop/mobile screenshots
 - [ ] Add a real screenshot / asciinema / GIF to README
 - [ ] Add a tiny demo of `cape scan` catching a malicious provider
 - [ ] Add one screenshot of `cape audit`
