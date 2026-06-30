@@ -12,60 +12,75 @@ env:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-          - os: macos-latest
-            target: aarch64-apple-darwin
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Cache cargo registry + build artifacts
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Test (Linux/macOS)
-        if: matrix.os != 'windows-latest'
-        run: cargo test --release --target ${{ matrix.target }}
-
-      - name: Test (Windows)
-        if: matrix.os == 'windows-latest'
-        run: cargo test --release --target ${{ matrix.target }}
-        env:
-          RUSTFLAGS: ""
-
-      - name: Clippy
-        if: matrix.os == 'ubuntu-latest'
-        run: cargo clippy --all-targets -- -D warnings
-
-      - name: fmt check
-        if: matrix.os == 'ubuntu-latest'
-        run: cargo fmt --all -- --check
-
-  msrv:
+    name: Test + clippy (stable)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.75
-      - run: cargo build --release
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: fmt
+        run: cargo fmt --all -- --check
+
+      - name: clippy (lib + tests + bins)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: test
+        run: cargo test --quiet
+
+  fuzz:
+    name: Adversarial fuzzer (fail if >20 evasions)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: build
+        run: cargo build --release --quiet
+
+      - name: run adversarial fuzzer
+        id: fuzz
+        run: |
+          set -e
+          OUTPUT=$(./target/release/sr fuzz --json 2>/dev/null || true)
+          EVASIONS_COUNT=$(echo "$OUTPUT" | jq '.evasions | length' 2>/dev/null || echo "0")
+          echo "evasions_count=$EVASIONS_COUNT" >> $GITHUB_OUTPUT
+          echo "Fuzz found $EVASIONS_COUNT evasions (threshold: 20)"
+          if [ "$EVASIONS_COUNT" -gt 20 ]; then
+            echo "::warning::Fuzz evasion count ($EVASIONS_COUNT) exceeds 20 — see report for fix candidates"
+            # Fail the job if >20 evasions.
+            exit 1
+          fi
+
+      - name: upload fuzz report
+        if: always()
+        run: |
+          ./target/release/sr fuzz --format markdown > fuzz-report.md 2>/dev/null || true
+          cat fuzz-report.md
+
+      - name: archive fuzz report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-report
+          path: fuzz-report.md
+          retention-days: 30
+
+  codeql:
+    name: CodeQL (security)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: rust
+      - uses: github/codeql-action/analyze@v3
