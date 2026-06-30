@@ -41,6 +41,7 @@ pub mod score;
 pub mod secure;
 pub mod session;
 pub mod sentinel;
+pub mod telemetry;
 pub mod tools;
 pub mod web;
 
