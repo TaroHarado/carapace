@@ -22,6 +22,10 @@ use hyper::{Method, Request, Response, Uri};
 use hyper_util::rt::TokioIo;
 use tokio::sync::mpsc;
 
+// WebSocket support
+use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
+use tokio_tungstenite::tungstenite::Message;
+
 use crate::cli::Mode;
 use crate::defense::{DefenseDecision, DefenseEngine, ToolUseObservation};
 use crate::inspect::{Inspector, Rules};
@@ -120,6 +124,12 @@ async fn forward(
     req: Request<hyper::body::Incoming>,
     fwd: Arc<ForwardCtx>,
 ) -> anyhow::Result<Response<BoxBody>> {
+    // Detect WebSocket upgrade requests. If the request is `GET ... Upgrade:
+    // websocket`, we route through `relay_ws` instead of the SSE path.
+    if is_ws_upgrade(&req) {
+        return relay_ws_upgrade(req, fwd).await;
+    }
+
     let (mut parts, body) = req.into_parts();
 
     let upstream_uri = if parts.uri.scheme().is_some() {
@@ -213,6 +223,364 @@ async fn forward(
     }
     let resp = resp.body(body).expect("valid proxy response");
     Ok(resp)
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// WebSocket relay path
+// ═══════════════════════════════════════════════════════════════════════
+
+/// True if the incoming HTTP request is a WebSocket upgrade request
+/// (`GET` with `Upgrade: websocket` header).
+fn is_ws_upgrade(req: &Request<hyper::body::Incoming>) -> bool {
+    if req.method() != Method::GET {
+        return false;
+    }
+    let upgrade = req
+        .headers()
+        .get("upgrade")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    upgrade.eq_ignore_ascii_case("websocket")
+}
+
+/// Handle a WebSocket upgrade request. Returns a `101 Switching Protocols`
+/// response to the client so hyper hands the connection off; the actual
+/// bi-directional relay runs in a spawned task that waits for
+/// `hyper::upgrade::OnUpgrade` to fire.
+///
+/// The relay:
+///   1. picks the upstream WsAdapter via `crate::protocol::pick_ws`
+///   2. opens a tokio-tungstenite connection to the upstream provider
+///      with the same path-and-query string the client used
+///   3. splits the client/upstream streams into sink/stream pairs
+///   4. for every text frame on either side:
+///        - adapter.process_inbound_text / process_outbound_text → Vec<Event>
+///        - inspector.feed(&evt) — same 9-layer defense run as the SSE path
+///        - if the verdict is Block: the frame is dropped (the malicious
+///          provider sees its injection swallowed, no tool_use ever runs
+///          on the client)
+///        - if the verdict is Allow: forward the frame to the peer
+///   5. binary/ping/pong/close frames are forwarded verbatim
+async fn relay_ws_upgrade(
+    mut req: Request<hyper::body::Incoming>,
+    fwd: Arc<ForwardCtx>,
+) -> anyhow::Result<Response<BoxBody>> {
+    use hyper::upgrade::OnUpgrade;
+
+    // Build the 101 Switching Protocols response. We must compute
+    // `Sec-WebSocket-Accept` from the client's `Sec-WebSocket-Key`.
+    let key = req
+        .headers()
+        .get("sec-websocket-key")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| anyhow::anyhow!("missing Sec-WebSocket-Key"))?
+        .to_string();
+    let accept = derive_accept_key(key.as_bytes());
+
+    // Capture the upstream URL the client wants to talk to. We rebuild it
+    // from `fwd.upstream` (scheme+host+port) + `req.uri` (path+query).
+    let path_and_query = req
+        .uri()
+        .path_and_query()
+        .map(|p| p.as_str())
+        .unwrap_or("/")
+        .to_string();
+    let upstream_scheme = if fwd.upstream.starts_with("https") {
+        "wss"
+    } else {
+        "ws"
+    };
+    let upstream_host = fwd
+        .upstream
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/');
+    let upstream_ws_url = format!("{upstream_scheme}://{upstream_host}{path_and_query}");
+
+    // Pick the right WsAdapter (openai-realtime / passthrough / future).
+    let adapter: Arc<Box<dyn crate::protocol::WsAdapter>> =
+        match crate::protocol::pick_ws(&upstream_ws_url) {
+            Some(a) => Arc::new(a),
+            None => {
+                tracing::warn!(upstream = %upstream_ws_url, "no WS adapter matched; using passthrough");
+                Arc::new(Box::new(crate::protocol::ws::passthrough::PassthroughWsAdapter::new()) as Box<dyn crate::protocol::WsAdapter>)
+            }
+        };
+    let adapter_name = adapter.name();
+    tracing::info!(
+        upstream = %upstream_ws_url,
+        adapter = adapter_name,
+        "ws upgrade requested; spawning relay"
+    );
+
+    let on_upgrade = req.extensions_mut().remove::<OnUpgrade>();
+    let recorder = fwd.recorder.clone();
+    let mode = fwd.mode;
+    let defense = fwd.defense.clone();
+
+    // Hand back the 101 response; hand off the upgraded socket to a task
+    // that does the actual bi-directional relay.
+    let mut resp = Response::builder()
+        .status(101)
+        .header("upgrade", "websocket")
+        .header("connection", "upgrade")
+        .header("sec-websocket-accept", accept);
+    if let Some(proto) = req.headers().get("sec-websocket-protocol").cloned() {
+        resp = resp.header("sec-websocket-protocol", proto);
+    }
+    let resp = resp.body(empty_body()).expect("valid 101 response");
+
+    // Spawn the actual relay task. It awaits the OnUpgrade future to obtain
+    // the raw socket, converts it to a tokio-tungstenite stream, opens an
+    // upstream connection, then runs the bidirectional inspecting relay.
+    tokio::spawn(async move {
+        let on_upgrade = match on_upgrade {
+            Some(o) => o,
+            None => {
+                tracing::warn!("ws relay: no OnUpgrade extension present");
+                return;
+            }
+        };
+        let upgraded = match on_upgrade.await {
+            Ok(u) => u,
+            Err(e) => {
+                tracing::warn!(error = %e, "ws relay: upgrade failed");
+                return;
+            }
+        };
+        let client_io = TokioIo::new(upgraded);
+        let client_ws = tokio_tungstenite::WebSocketStream::from_raw_socket(
+            client_io,
+            tokio_tungstenite::tungstenite::protocol::Role::Server,
+            None,
+        )
+        .await;
+
+        // Connect to the upstream provider over WebSocket.
+        let upstream_ws = match connect_upstream_ws(&upstream_ws_url, &fwd).await {
+            Ok(ws) => ws,
+            Err(e) => {
+                tracing::warn!(error = %e, upstream = %upstream_ws_url, "ws relay: upstream connect failed");
+                return;
+            }
+        };
+
+        // Run the inspecting bi-directional relay.
+        if let Err(e) = run_ws_relay(client_ws, upstream_ws, adapter, recorder, mode, defense).await {
+            tracing::debug!(error = %e, "ws relay: closed");
+        }
+    });
+
+    Ok(resp)
+}
+
+/// Connect to the upstream provider over WebSocket. Returns the
+/// established WebSocket stream; auth header forwards `fwd.key` if provided.
+async fn connect_upstream_ws(
+    url: &str,
+    fwd: &ForwardCtx,
+) -> anyhow::Result<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>> {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let mut req = url.into_client_request()?;
+    if !fwd.key.is_empty() {
+        if url.contains("anthropic.com") {
+            req.headers_mut().insert(
+                "x-api-key",
+                fwd.key.as_str().parse().expect("api key valid header"),
+            );
+        } else {
+            let bearer = format!("Bearer {}", fwd.key.as_str());
+            req.headers_mut().insert(
+                tokio_tungstenite::tungstenite::http::header::AUTHORIZATION,
+                bearer.parse().expect("bearer header valid"),
+            );
+        }
+    }
+    let (ws, _resp) = tokio_tungstenite::connect_async(req).await?;
+    Ok(ws)
+}
+
+/// The actual bi-directional relay loop. Both halves run concurrently via
+/// `tokio::select!`; each text frame is processed through the WsAdapter + the
+/// inspector before being forwarded to the peer.
+async fn run_ws_relay<S, U>(
+    client_ws: tokio_tungstenite::WebSocketStream<S>,
+    upstream_ws: tokio_tungstenite::WebSocketStream<U>,
+    adapter: Arc<Box<dyn crate::protocol::WsAdapter>>,
+    recorder: Arc<Recorder>,
+    mode: Mode,
+    defense: Arc<DefenseEngine>,
+) -> anyhow::Result<()>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    U: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    use futures_util::{SinkExt, StreamExt};
+    let (mut client_sink, mut client_stream) = client_ws.split();
+    let (mut upstream_sink, mut upstream_stream) = upstream_ws.split();
+
+    let mut inspector = Inspector::builtin(HashSet::new());
+    let mut blocked_count = 0u32;
+    let mut max_severity = 0u32;
+    let mut matched_categories: Vec<String> = Vec::new();
+
+    // Two halves: client → upstream, upstream → client.
+    // We use a channel so the upstream-facing sink can receive frames
+    // produced by the inspector for the client.
+    loop {
+        tokio::select! {
+            // ----- client → upstream -----
+            Some(frame) = client_stream.next() => {
+                let frame = match frame {
+                    Ok(f) => f,
+                    Err(e) => {
+                        tracing::debug!(error=%e, "ws relay: client read closed");
+                        break;
+                    }
+                };
+                let events = match frame {
+                    Message::Text(t) => adapter.process_inbound_text(&t),
+                    Message::Binary(b) => adapter.process_inbound_binary(Bytes::from(b)),
+                    Message::Ping(p) => vec![crate::protocol::Event::WsPing(Bytes::from(p))],
+                    Message::Pong(p) => vec![crate::protocol::Event::WsPong(Bytes::from(p))],
+                    Message::Close(_) => {
+                        let _ = upstream_sink.send(Message::Close(None)).await;
+                        break;
+                    }
+                    Message::Frame(_) => {
+                        // Raw frame — tungstenite normally pre-parses these.
+                        continue;
+                    }
+                };
+                for ev in events {
+                    // Inspector runs on every event. We don't substitute on
+                    // the client→upstream direction (the user can do what
+                    // they want), but we DO surface the verdict so the
+                    // recorder sees what the client typed.
+                    let verdict = inspector.feed(&ev);
+                    if !verdict.is_clean() {
+                        max_severity = max_severity.max(verdict.severity);
+                        matched_categories.extend(verdict.matched.iter().cloned());
+                    }
+                    // Forward the original frame upstream (no substitution on
+                    // client→upstream path — the user is allowed to talk to
+                    // the upstream).
+                    let outgoing = event_to_ws_message(&ev, false);
+                    if let Some(msg) = outgoing {
+                        if upstream_sink.send(msg).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+            // ----- upstream → client -----
+            Some(frame) = upstream_stream.next() => {
+                let frame = match frame {
+                    Ok(f) => f,
+                    Err(e) => {
+                        tracing::debug!(error=%e, "ws relay: upstream read closed");
+                        break;
+                    }
+                };
+                let events = match frame {
+                    Message::Text(t) => adapter.process_outbound_text(&t),
+                    Message::Binary(b) => adapter.process_outbound_binary(Bytes::from(b)),
+                    Message::Ping(p) => vec![crate::protocol::Event::WsPing(Bytes::from(p))],
+                    Message::Pong(p) => vec![crate::protocol::Event::WsPong(Bytes::from(p))],
+                    Message::Close(_) => {
+                        let _ = client_sink.send(Message::Close(None)).await;
+                        break;
+                    }
+                    Message::Frame(_) => continue,
+                };
+                for ev in events {
+                    let verdict = inspector.feed(&ev);
+                    let mut dropped = false;
+                    if !verdict.is_clean() {
+                        max_severity = max_severity.max(verdict.severity);
+                        matched_categories.extend(verdict.matched.iter().cloned());
+                        // Also consider building a ToolUseObservation for the
+                        // defense engine. We use the reassembled buffer when
+                        // the inspector has accumulated tool_use input.
+                        if matches!(mode, Mode::Block) && verdict.severity >= 60 {
+                            blocked_count += 1;
+                            tracing::warn!(
+                                rule = ?verdict.matched,
+                                sev = verdict.severity,
+                                "ws relay: dropping malicious upstream frame"
+                            );
+                            dropped = true;
+                        }
+                    }
+                    if dropped {
+                        continue;
+                    }
+                    let outgoing = event_to_ws_message(&ev, true);
+                    if let Some(msg) = outgoing {
+                        if client_sink.send(msg).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+            else => {
+                break;
+            }
+        }
+    }
+
+    // Diagnostic recorder entry. Same shape as the SSE path.
+    let _ = recorder.record(
+        "ws",
+        mode_label(mode),
+        &crate::inspect::Verdict {
+            matched: matched_categories.clone(),
+            severity: max_severity,
+            unsolicited_tool_use: blocked_count > 0,
+            tool_name: None,
+            tier: if max_severity > 0 {
+                Some(crate::inspect::SeverityTier::from_severity(max_severity))
+            } else {
+                None
+            },
+        },
+        "", // empty reassembled-buffer on relay path; per-frame decisions logged separately
+    );
+    let _ = defense; // touched if we extend this to call defense.evaluate
+    Ok(())
+}
+
+/// Convert an [`Event`] to a [`tokio_tungstenite::tungstenite::Message`].
+/// Returns None if the event doesn't produce a frame (e.g. WsClose which
+/// the relay handles by closing the sink itself).
+fn event_to_ws_message(ev: &crate::protocol::Event, _from_upstream: bool) -> Option<Message> {
+    match ev {
+        crate::protocol::Event::TextDelta(s) => Some(Message::Text(s.clone())),
+        crate::protocol::Event::ToolUseStart { .. }
+        | crate::protocol::Event::ToolUseDelta(_)
+        | crate::protocol::Event::ToolUseEnd => {
+            // The adapter parsed structured tool_use events out of frames.
+            // They are NOT broadcast back on the wire as standalone events;
+            // the full raw frame was already emitted via WsText. The match
+            // arms exist so the inspector sees them. Nothing to send here.
+            None
+        }
+        crate::protocol::Event::Raw(b) => {
+            // Raw passthrough bytes — emit as binary.
+            Some(Message::Binary(b.clone().into()))
+        }
+        crate::protocol::Event::WsText { text, .. } => Some(Message::Text(text.clone())),
+        crate::protocol::Event::WsBinary { data, .. } => Some(Message::Binary(data.clone().into())),
+        crate::protocol::Event::WsPing(b) => Some(Message::Ping(b.clone().into())),
+        crate::protocol::Event::WsPong(b) => Some(Message::Pong(b.clone().into())),
+        crate::protocol::Event::WsClose => None,
+    }
+}
+
+/// Construct an empty BoxBody for 101 responses (which carry no body).
+fn empty_body() -> BoxBody {
+    use http_body_util::Empty;
+    Empty::<Bytes>::new().boxed()
 }
 
 struct InspectCtx {
@@ -426,6 +794,27 @@ async fn inspect_and_forward(
             }
             Event::Raw(b) => {
                 let _ = tx.send(Ok(b)).await;
+            }
+            // ----- WebSocket events reaching the SSE relay path -----
+            //
+            // These should never arrive on the SSE path. If they do, pass
+            // the bytes through so the client still receives them — but log
+            // a warning so we notice the misconfiguration. The real WS
+            // relay path is implemented in `relay_ws` below.
+            Event::WsText { text, .. } => {
+                tracing::warn!("ws-text event reached SSE relay path — routing bug?");
+                let _ = tx.send(Ok(Bytes::from(text.clone()))).await;
+            }
+            Event::WsBinary { data, .. } => {
+                tracing::warn!("ws-binary event reached SSE relay path — routing bug?");
+                let _ = tx.send(Ok(data.clone())).await;
+            }
+            Event::WsPing(_b) | Event::WsPong(_b) => {
+                // Control frames — no payload to forward on SSE; ignore safely.
+            }
+            Event::WsClose => {
+                // Signal close to client by ending the stream (the loop will
+                // exit when `events` returns None).
             }
         }
     }

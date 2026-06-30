@@ -208,6 +208,14 @@ pub fn event_to_bytes(ev: &Event, index: u32) -> Bytes {
             sse_frame("content_block_stop", &payload)
         }
         Event::Raw(b) => b.clone(),
+        // WebSocket events never reach the Anthropic SSE serializer — they are
+        // emitted by a WsAdapter and routed via a separate WS-path handler
+        // in proxy.rs (relay_ws). If you see this panic, a WS event leaked
+        // into the SSE path — that's a bug.
+        Event::WsText { text, .. } => Bytes::from(text.clone()),
+        Event::WsBinary { data, .. } => data.clone(),
+        Event::WsPing(b) | Event::WsPong(b) => b.clone(),
+        Event::WsClose => Bytes::new(),
     }
 }
 

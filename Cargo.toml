@@ -58,6 +58,7 @@ rand_core = { version = "0.6", features = ["std"] }
 rand = "0.8"
 sled = "0.34"
 uuid = { version = "1.11", features = ["v4", "serde"] }
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 
 [dev-dependencies]
 tempfile = "3"

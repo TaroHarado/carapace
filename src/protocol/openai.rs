@@ -185,6 +185,12 @@ pub fn event_to_bytes(ev: &Event, tool_index: u32) -> Bytes {
             sse_frame(&payload)
         }
         Event::Raw(b) => b.clone(),
+        // WS events shouldn't reach the SSE serializer on this path — see
+        // anthropic.rs for the same guard. Pass through bytes if they do.
+        Event::WsText { text, .. } => Bytes::from(text.clone()),
+        Event::WsBinary { data, .. } => data.clone(),
+        Event::WsPing(b) | Event::WsPong(b) => b.clone(),
+        Event::WsClose => Bytes::new(),
     }
 }
 

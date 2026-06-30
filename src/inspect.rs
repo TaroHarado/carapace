@@ -343,6 +343,33 @@ impl Inspector {
                 }
                 self.scan_buffer(false, None)
             }
+            // ----- WebSocket events -----
+            Event::WsText { text, from_upstream } => {
+                // Only scan upstream text frames for malicious payloads; client
+                // → upstream frames are the user's own input.
+                if *from_upstream {
+                    self.buffer.push_str(text);
+                    return self.scan_buffer(false, None);
+                }
+                Verdict::default()
+            }
+            Event::WsBinary { data, from_upstream } => {
+                // Binary frames are usually base64-encoded audio; the regex
+                // detector is byte-faithful and would scan them anyway if
+                // from_upstream, but in practice pattern matches on audio
+                // bytes are noise. Pass through unscanned by default.
+                if *from_upstream {
+                    if let Ok(s) = std::str::from_utf8(data) {
+                        self.buffer.push_str(s);
+                        return self.scan_buffer(false, None);
+                    }
+                }
+                Verdict::default()
+            }
+            Event::WsPing(_) | Event::WsPong(_) | Event::WsClose => {
+                // Control frames — never produce a verdict.
+                Verdict::default()
+            }
         }
     }
 
