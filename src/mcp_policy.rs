@@ -1,10 +1,11 @@
 //! Remote tool-call policy — allowlist / denylist for tool names seen by the
 //! proxy.
 //!
-//! Historical note: this module started as an MCP-only gate, so the env vars
-//! keep the `SR_MCP_*` prefix for compatibility. In the current proxy path,
-//! the policy is applied to reassembled remote `tool_use` events generically,
-//! not just JSON-RPC MCP `tools/call` frames.
+//! Historical note: this module started as an MCP-only gate. The newer
+//! `SR_TOOL_*` env vars are the preferred names; legacy `SR_MCP_*` aliases are
+//! still supported for compatibility. In the current proxy path, the policy is
+//! applied to reassembled remote `tool_use` events generically, not just
+//! JSON-RPC MCP `tools/call` frames.
 //!
 //! ## Policy resolution order
 //!
@@ -15,15 +16,19 @@
 //! ## Environment-variable configuration (no config file required)
 //!
 //! ```text
-//! SR_MCP_ALLOW=Bash,Read,Write          # comma-separated allowlist
-//! SR_MCP_DENY=exec,shell,eval           # comma-separated denylist
-//! SR_MCP_POLICY=strict                  # strict = deny-all except allowlist
+//! SR_TOOL_ALLOW=Bash,Read,Write         # preferred allowlist name
+//! SR_TOOL_DENY=exec,shell,eval          # preferred denylist name
+//! SR_TOOL_POLICY=strict                 # preferred mode name
 //!                                       # permissive (default) = allow unless denied
+//! SR_MCP_ALLOW=...                      # legacy alias
+//! SR_MCP_DENY=...                       # legacy alias
+//! SR_MCP_POLICY=...                     # legacy alias
 //! ```
 //!
 //! ## File-based configuration
 //!
-//! `SR_MCP_POLICY_FILE=/path/to/mcp-policy.json` loads:
+//! `SR_TOOL_POLICY_FILE=/path/to/mcp-policy.json` loads:
+//! Legacy alias: `SR_MCP_POLICY_FILE`.
 //!
 //! ```json
 //! {
@@ -78,10 +83,13 @@ pub struct McpPolicy {
 impl McpPolicy {
     /// Build a policy from environment variables.
     ///
-    /// `SR_MCP_ALLOW`, `SR_MCP_DENY`, `SR_MCP_POLICY` (strict|permissive).
+    /// Preferred env names: `SR_TOOL_ALLOW`, `SR_TOOL_DENY`,
+    /// `SR_TOOL_POLICY`, `SR_TOOL_POLICY_FILE`.
+    /// Legacy aliases: `SR_MCP_ALLOW`, `SR_MCP_DENY`, `SR_MCP_POLICY`,
+    /// `SR_MCP_POLICY_FILE`.
     pub fn from_env() -> Self {
         // Check for file-based config first.
-        if let Ok(path) = std::env::var("SR_MCP_POLICY_FILE") {
+        if let Some(path) = env_first(&["SR_TOOL_POLICY_FILE", "SR_MCP_POLICY_FILE"]) {
             if let Ok(raw) = std::fs::read_to_string(&path) {
                 if let Ok(p) = serde_json::from_str::<McpPolicy>(&raw) {
                     tracing::info!(path, "mcp-policy: loaded from file");
@@ -90,12 +98,11 @@ impl McpPolicy {
             }
         }
 
-        let allow = parse_csv_env("SR_MCP_ALLOW");
-        let deny = parse_csv_env("SR_MCP_DENY");
-        let mode = match std::env::var("SR_MCP_POLICY")
+        let allow = parse_csv_env_multi(&["SR_TOOL_ALLOW", "SR_MCP_ALLOW"]);
+        let deny = parse_csv_env_multi(&["SR_TOOL_DENY", "SR_MCP_DENY"]);
+        let mode = match env_first(&["SR_TOOL_POLICY", "SR_MCP_POLICY"])
             .as_deref()
-            .unwrap_or("permissive")
-        {
+            .unwrap_or("permissive") {
             "strict" => McpPolicyMode::Strict,
             _ => McpPolicyMode::Permissive,
         };
@@ -123,8 +130,12 @@ impl McpPolicy {
     }
 }
 
-fn parse_csv_env(var: &str) -> HashSet<String> {
-    std::env::var(var)
+fn env_first(vars: &[&str]) -> Option<String> {
+    vars.iter().find_map(|var| std::env::var(var).ok())
+}
+
+fn parse_csv_env_multi(vars: &[&str]) -> HashSet<String> {
+    env_first(vars)
         .unwrap_or_default()
         .split(',')
         .map(|s| s.trim().to_string())
@@ -206,6 +217,24 @@ mod tests {
     #[test]
     fn from_env_parses_allow_deny_vars() {
         let _guard = env_lock();
+        std::env::remove_var("SR_TOOL_POLICY_FILE");
+        std::env::remove_var("SR_MCP_POLICY_FILE");
+        std::env::set_var("SR_TOOL_ALLOW", "Bash,Read");
+        std::env::set_var("SR_TOOL_DENY", "exec");
+        std::env::set_var("SR_TOOL_POLICY", "strict");
+        let p = McpPolicy::from_env();
+        std::env::remove_var("SR_TOOL_ALLOW");
+        std::env::remove_var("SR_TOOL_DENY");
+        std::env::remove_var("SR_TOOL_POLICY");
+        assert!(p.allow.contains("Bash"));
+        assert!(p.deny.contains("exec"));
+        assert_eq!(p.mode, McpPolicyMode::Strict);
+    }
+
+    #[test]
+    fn from_env_legacy_aliases_still_work() {
+        let _guard = env_lock();
+        std::env::remove_var("SR_TOOL_POLICY_FILE");
         std::env::remove_var("SR_MCP_POLICY_FILE");
         std::env::set_var("SR_MCP_ALLOW", "Bash,Read");
         std::env::set_var("SR_MCP_DENY", "exec");
@@ -220,8 +249,26 @@ mod tests {
     }
 
     #[test]
+    fn preferred_tool_envs_override_legacy_mcp_envs() {
+        let _guard = env_lock();
+        std::env::remove_var("SR_TOOL_POLICY_FILE");
+        std::env::remove_var("SR_MCP_POLICY_FILE");
+        std::env::set_var("SR_TOOL_ALLOW", "Read");
+        std::env::set_var("SR_MCP_ALLOW", "Bash");
+        let p = McpPolicy::from_env();
+        std::env::remove_var("SR_TOOL_ALLOW");
+        std::env::remove_var("SR_MCP_ALLOW");
+        assert!(p.allow.contains("Read"));
+        assert!(!p.allow.contains("Bash"));
+    }
+
+    #[test]
     fn from_env_empty_vars_gives_empty_policy() {
         let _guard = env_lock();
+        std::env::remove_var("SR_TOOL_ALLOW");
+        std::env::remove_var("SR_TOOL_DENY");
+        std::env::remove_var("SR_TOOL_POLICY");
+        std::env::remove_var("SR_TOOL_POLICY_FILE");
         std::env::remove_var("SR_MCP_ALLOW");
         std::env::remove_var("SR_MCP_DENY");
         std::env::remove_var("SR_MCP_POLICY");
@@ -233,6 +280,10 @@ mod tests {
     #[test]
     fn global_policy_returns_none_when_unconfigured() {
         let _guard = env_lock();
+        std::env::remove_var("SR_TOOL_ALLOW");
+        std::env::remove_var("SR_TOOL_DENY");
+        std::env::remove_var("SR_TOOL_POLICY");
+        std::env::remove_var("SR_TOOL_POLICY_FILE");
         std::env::remove_var("SR_MCP_ALLOW");
         std::env::remove_var("SR_MCP_DENY");
         std::env::remove_var("SR_MCP_POLICY");
@@ -243,10 +294,11 @@ mod tests {
     #[test]
     fn global_policy_returns_some_when_configured() {
         let _guard = env_lock();
+        std::env::remove_var("SR_TOOL_POLICY_FILE");
         std::env::remove_var("SR_MCP_POLICY_FILE");
-        std::env::set_var("SR_MCP_DENY", "exec");
+        std::env::set_var("SR_TOOL_DENY", "exec");
         let p = global_policy();
-        std::env::remove_var("SR_MCP_DENY");
+        std::env::remove_var("SR_TOOL_DENY");
         assert!(p.is_some());
     }
 }
