@@ -19,6 +19,7 @@ use tokio::sync::Semaphore;
 use crate::deep_scan;
 use crate::defense_log;
 use crate::certify;
+use crate::correlation;
 use crate::enforcement;
 use crate::history;
 use crate::judge;
@@ -156,6 +157,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/history", post(list_history))
         .route("/api/defense-events", get(list_defense_events))
         .route("/api/chain-graph", get(chain_graph))
+        .route("/api/correlation-alerts", get(list_correlation_alerts))
         .route("/api/quarantine", get(list_quarantine))
         .route("/api/quarantine/release", post(release_quarantine))
         .route("/api/quarantine/purge", post(purge_quarantine))
@@ -287,6 +289,13 @@ async fn list_defense_events() -> Result<Json<Vec<defense_log::DefenseEvent>>, A
     Ok(Json(events))
 }
 
+async fn list_correlation_alerts() -> Result<Json<Vec<correlation::CorrelationAlert>>, ApiError> {
+    let store = correlation::CorrelationStore::open_default()
+        .map_err(|e| ApiError::message(&e.to_string()))?;
+    let alerts = store.active_alerts().map_err(|e| ApiError::message(&e.to_string()))?;
+    Ok(Json(alerts))
+}
+
 #[derive(Debug, Serialize)]
 struct GraphNode {
     id: usize,
@@ -312,8 +321,7 @@ struct ChainGraph {
     edges: Vec<GraphEdge>,
 }
 
-async fn chain_graph() -> Result<Json<ChainGraph>, ApiError> {
-    let events = defense_log::load_recent(200).map_err(ApiError::from_anyhow)?;
+async fn chain_graph() -> Result<Json<ChainGraph>, ApiError> {    let events = defense_log::load_recent(200).map_err(ApiError::from_anyhow)?;
     let mut nodes: Vec<GraphNode> = Vec::new();
     let mut edges: Vec<GraphEdge> = Vec::new();
 

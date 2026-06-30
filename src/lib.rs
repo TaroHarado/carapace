@@ -10,6 +10,7 @@ pub mod artifact;
 pub mod asset;
 pub mod canary;
 pub mod capability_matrix;
+pub mod correlation;
 pub mod defense;
 pub mod defense_log;
 pub mod egress;
