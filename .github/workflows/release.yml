@@ -61,6 +61,38 @@ jobs:
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
 
+      # ----- Optional platform-native signing (best effort) ---------------
+      #
+      # These steps only run if the relevant secrets are configured.
+      # Otherwise the workflow builds unsigned binaries and the release job
+      # still signs the final archives using Sigstore keyless signatures.
+
+      - name: Sign Windows binary (optional Authenticode)
+        if: runner.os == 'Windows' && secrets.WINDOWS_CERT_BASE64 != '' && secrets.WINDOWS_CERT_PASSWORD != ''
+        shell: pwsh
+        run: |
+          $pfxPath = "$env:RUNNER_TEMP\codesign.pfx"
+          [System.IO.File]::WriteAllBytes($pfxPath, [System.Convert]::FromBase64String("${{ secrets.WINDOWS_CERT_BASE64 }}"))
+          $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
+          if (-not $signtool) {
+            Write-Error "signtool.exe not found on runner"
+            exit 1
+          }
+          & $signtool.Path sign /f $pfxPath /p "${{ secrets.WINDOWS_CERT_PASSWORD }}" /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "target/${{ matrix.target }}/release/sr.exe"
+
+      - name: Sign macOS binary (optional codesign)
+        if: runner.os == 'macOS' && secrets.MACOS_CODESIGN_IDENTITY != ''
+        shell: bash
+        run: |
+          codesign --force --timestamp --sign "${{ secrets.MACOS_CODESIGN_IDENTITY }}" "target/${{ matrix.target }}/release/sr"
+
+      - name: Notarize macOS archive (optional)
+        if: runner.os == 'macOS' && secrets.APPLE_ID != '' && secrets.APPLE_APP_PASSWORD != '' && secrets.APPLE_TEAM_ID != ''
+        shell: bash
+        run: |
+          # Notarization happens after packaging; the archive path is known later.
+          echo "deferred" > "$RUNNER_TEMP/notarize.flag"
+
       - name: Package (Unix)
         if: runner.os != 'Windows'
         run: |
@@ -68,6 +100,16 @@ jobs:
           cp target/${{ matrix.target }}/release/sr package/bin/
           cp README.md LICENSE NOTICE package/ 2>/dev/null || true
           tar czf ${{ matrix.archive }} -C package .
+
+      - name: Notarize macOS package (optional)
+        if: runner.os == 'macOS' && secrets.APPLE_ID != '' && secrets.APPLE_APP_PASSWORD != '' && secrets.APPLE_TEAM_ID != ''
+        shell: bash
+        run: |
+          xcrun notarytool submit "${{ matrix.archive }}" \
+            --apple-id "${{ secrets.APPLE_ID }}" \
+            --password "${{ secrets.APPLE_APP_PASSWORD }}" \
+            --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+            --wait
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
@@ -105,6 +147,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -115,6 +158,20 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f | sort
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.6.0
+
+      - name: Keyless-sign archives (Sigstore)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t FILES < <(find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.sha256' \))
+          for f in "${FILES[@]}"; do
+            cosign sign-blob --yes "$f" \
+              --output-signature "$f.sig" \
+              --output-certificate "$f.pem"
+          done
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -124,4 +181,6 @@ jobs:
             artifacts/**/*.tar.gz.sha256
             artifacts/**/*.zip
             artifacts/**/*.zip.sha256
+            artifacts/**/*.sig
+            artifacts/**/*.pem
           fail_on_unmatched_files: true
