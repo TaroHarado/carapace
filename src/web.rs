@@ -158,6 +158,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/defense-events", get(list_defense_events))
         .route("/api/chain-graph", get(chain_graph))
         .route("/api/correlation-alerts", get(list_correlation_alerts))
+        .route("/api/self-fuzz-regressions", get(list_self_fuzz_regressions))
         .route("/api/quarantine", get(list_quarantine))
         .route("/api/quarantine/release", post(release_quarantine))
         .route("/api/quarantine/purge", post(purge_quarantine))
@@ -294,6 +295,12 @@ async fn list_correlation_alerts() -> Result<Json<Vec<correlation::CorrelationAl
         .map_err(|e| ApiError::message(&e.to_string()))?;
     let alerts = store.active_alerts().map_err(|e| ApiError::message(&e.to_string()))?;
     Ok(Json(alerts))
+}
+
+async fn list_self_fuzz_regressions() -> Result<Json<Vec<crate::self_fuzz::FuzzRegression>>, ApiError> {
+    let regressions = crate::self_fuzz::load_recent_regressions(200)
+        .map_err(|e| ApiError::message(&e.to_string()))?;
+    Ok(Json(regressions))
 }
 
 #[derive(Debug, Serialize)]

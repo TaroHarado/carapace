@@ -546,11 +546,52 @@ let defense = std::sync::Arc::new(safeproxy::defense::DefenseEngine::with_defaul
 eprintln!("demo feed written -> {}", out.display());
             Ok(())
         }
-        Commands::Fuzz { format, out, apply, rules } => {
+        Commands::Fuzz { format, out, apply, rules, watch } => {
             let loaded_rules = match rules {
                 Some(p) => safeproxy::inspect::load_from_files(Some(&p), None)?,
                 None => safeproxy::inspect::BUILTIN.clone(),
             };
+
+            // --watch mode: run continuously, print new evasions as they appear
+            if let Some(interval_secs) = watch {
+                use std::collections::HashSet;
+                use std::time::Duration;
+                eprintln!("fuzz: watch mode, interval={}s (Ctrl+C to stop)", interval_secs);
+                let mut seen: HashSet<String> = HashSet::new();
+                loop {
+                    let report = safeproxy::fuzz::fuzz_rules(&loaded_rules);
+                    let mut new_count = 0usize;
+                    for ev in &report.evasions {
+                        let key = format!("{}:{}:{}", ev.original_rule_id, ev.mutation.label(), ev.mutated_payload);
+                        if seen.insert(key) {
+                            eprintln!(
+                                "[NEW] rule={} op={} original={:?} mutated={:?}",
+                                ev.original_rule_id,
+                                ev.mutation.label(),
+                                ev.original_payload,
+                                ev.mutated_payload,
+                            );
+                            new_count += 1;
+                        }
+                    }
+                    eprintln!(
+                        "fuzz: {} rules, {} mutations, {} evasions, {} new (coverage {:.1}%)",
+                        report.total_rules_fuzzed,
+                        report.total_mutations_generated,
+                        report.evasions.len(),
+                        new_count,
+                        report.coverage_percent
+                    );
+                    if apply && !report.evasions.is_empty() {
+                        let candidate_json = safeproxy::fuzz::render_candidate_rules_json(&report);
+                        let dest = std::path::Path::new("rules/fuzz-generated.json");
+                        std::fs::create_dir_all("rules")?;
+                        std::fs::write(dest, &candidate_json)?;
+                    }
+                    std::thread::sleep(Duration::from_secs(interval_secs));
+                }
+            }
+
             let report = safeproxy::fuzz::fuzz_rules(&loaded_rules);
             eprintln!(
                 "fuzz: {} rules, {} mutations, {} evasions (coverage {:.1}%)",

@@ -311,6 +311,11 @@ pub enum Commands {
         /// Use a custom rules file instead of the built-in rules.
         #[arg(long)]
         rules: Option<PathBuf>,
+
+        /// Run continuously, re-fuzzing every N seconds. Prints new evasions
+        /// as they are discovered (Ctrl+C to stop).
+        #[arg(long, value_name = "SECS")]
+        watch: Option<u64>,
     },
 
     /// Plant decoy credential files / wallet keystores. Any tool_use that
