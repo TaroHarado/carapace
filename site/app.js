@@ -14,6 +14,8 @@ const latencyLine = document.getElementById("latencyLine");
 const uptimeLine = document.getElementById("uptimeLine");
 const useCase = document.getElementById("useCase");
 const registryRows = document.getElementById("registryRows");
+const quarantineRows = document.getElementById("quarantineRows");
+const clearQuarantineBtn = document.getElementById("clearQuarantineBtn");
 const judgeStatus = document.getElementById("judgeStatus");
 const historyTimeline = document.getElementById("historyTimeline");
 const sessionTask = document.getElementById("sessionTask");
@@ -177,6 +179,7 @@ form.addEventListener("submit", async (event) => {
 refreshRegistry().catch(() => {});
 refreshHealth().catch(() => {});
 refreshHistory().catch(() => {});
+refreshQuarantine().catch(() => {});
 
 function safeHost(url) {
   try {
@@ -279,6 +282,69 @@ async function refreshRegistry() {
   }
 }
 
+async function refreshQuarantine() {
+  if (!quarantineRows) return;
+  const res = await fetch("/api/quarantine");
+  if (!res.ok) throw new Error("quarantine unavailable");
+  const entries = await res.json();
+  if (!Array.isArray(entries) || entries.length === 0) {
+    quarantineRows.innerHTML = `
+      <div class="table-row">
+        <span>quarantine store empty</span>
+        <span>—</span>
+        <span>—</span>
+        <span>—</span>
+        <strong class="safe-text">nothing held</strong>
+      </div>
+    `;
+    return;
+  }
+
+  quarantineRows.innerHTML = "";
+  for (const entry of entries.slice(0, 8)) {
+    const row = document.createElement("div");
+    row.className = "table-row";
+    const status = entry.released ? "released" : "held";
+    const action = entry.released
+      ? `<strong class="safe-text">released</strong>`
+      : `<div class="quarantine-actions">
+           <button class="ghost-action qt-release" data-sha="${entry.sha256}">Release</button>
+           <button class="ghost-action qt-purge" data-sha="${entry.sha256}">Purge</button>
+         </div>`;
+    row.innerHTML = `
+      <span title="${entry.original_path}">${entry.original_path}</span>
+      <span title="${entry.sha256}">${entry.sha256.slice(0, 12)}…</span>
+      <span>${entry.sniffed_type}</span>
+      <span>${entry.is_executable ? "yes" : "no"}</span>
+      <span>${action}</span>
+    `;
+    quarantineRows.appendChild(row);
+  }
+
+  for (const btn of quarantineRows.querySelectorAll(".qt-release")) {
+    btn.addEventListener("click", async () => {
+      const sha = btn.dataset.sha;
+      await fetch("/api/quarantine/release", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sha256: sha }),
+      });
+      await refreshQuarantine();
+    });
+  }
+  for (const btn of quarantineRows.querySelectorAll(".qt-purge")) {
+    btn.addEventListener("click", async () => {
+      const sha = btn.dataset.sha;
+      await fetch("/api/quarantine/purge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sha256: sha }),
+      });
+      await refreshQuarantine();
+    });
+  }
+}
+
 async function refreshHistory(host = null) {
   if (!historyTimeline) return;
   const res = await fetch("/api/history", {
@@ -324,4 +390,11 @@ async function refreshHealth() {
       judgeStatus.textContent = "Semantic arbiter: local daemon offline (mock mode)";
     }
   }
+}
+
+if (clearQuarantineBtn) {
+  clearQuarantineBtn.addEventListener("click", async () => {
+    await fetch("/api/quarantine/clear", { method: "POST" });
+    await refreshQuarantine();
+  });
 }

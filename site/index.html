@@ -299,6 +299,34 @@ verdict: chat-only</pre>
               </div>
             </div>
           </div>
+
+          <div class="panel panel-glass index-card" id="quarantine">
+            <div class="panel-head index-head">
+              <div>
+                <div class="kicker">Quarantine review</div>
+                <h2>Held artifacts</h2>
+              </div>
+              <button class="ghost-action" id="clearQuarantineBtn" type="button">Clear held entries</button>
+            </div>
+            <div class="index-table modern">
+              <div class="table-head">
+                <span>Original path</span>
+                <span>SHA256</span>
+                <span>Sniffed type</span>
+                <span>Exec</span>
+                <span>Action</span>
+              </div>
+              <div id="quarantineRows">
+                <div class="table-row">
+                  <span>quarantine store empty</span>
+                  <span>—</span>
+                  <span>—</span>
+                  <span>—</span>
+                  <strong class="safe-text">nothing held</strong>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </main>

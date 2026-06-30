@@ -22,6 +22,7 @@ use crate::enforcement;
 use crate::history;
 use crate::judge;
 use crate::policy::{self, Action, ActionKind, Decision, ProviderRisk};
+use crate::quarantine;
 use crate::registry::{self, Registry};
 use crate::scan;
 use crate::score;
@@ -115,6 +116,11 @@ pub struct EnforcementEvalRequest {
     pub provider_risk: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct QuarantineActionRequest {
+    pub sha256: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
     pub ok: bool,
@@ -147,6 +153,10 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/verify", post(run_verify))
         .route("/api/registry", get(list_registry))
         .route("/api/history", post(list_history))
+        .route("/api/quarantine", get(list_quarantine))
+        .route("/api/quarantine/release", post(release_quarantine))
+        .route("/api/quarantine/purge", post(purge_quarantine))
+        .route("/api/quarantine/clear", post(clear_quarantine))
         .route("/api/session/init", post(init_session))
         .route("/api/session/show", post(show_session))
         .route("/api/session/grant", post(grant_session))
@@ -267,6 +277,38 @@ async fn list_history(Json(req): Json<HistoryQuery>) -> Result<Json<Vec<history:
     }
     all.sort_by(|a, b| b.checked_at.cmp(&a.checked_at));
     Ok(Json(all))
+}
+
+async fn list_quarantine() -> Result<Json<Vec<quarantine::QuarantineEntry>>, ApiError> {
+    let store = quarantine::QuarantineStore::open_default()
+        .map_err(|e| ApiError::message(&e.to_string()))?;
+    Ok(Json(store.list()))
+}
+
+async fn release_quarantine(Json(req): Json<QuarantineActionRequest>) -> Result<StatusCode, ApiError> {
+    let store = quarantine::QuarantineStore::open_default()
+        .map_err(|e| ApiError::message(&e.to_string()))?;
+    store.release(&req.sha256).map_err(|e| ApiError::message(&e.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn purge_quarantine(Json(req): Json<QuarantineActionRequest>) -> Result<StatusCode, ApiError> {
+    let store = quarantine::QuarantineStore::open_default()
+        .map_err(|e| ApiError::message(&e.to_string()))?;
+    store.purge(&req.sha256).map_err(|e| ApiError::message(&e.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn clear_quarantine() -> Result<StatusCode, ApiError> {
+    let store = quarantine::QuarantineStore::open_default()
+        .map_err(|e| ApiError::message(&e.to_string()))?;
+    let entries = store.list();
+    for e in entries {
+        if !e.released {
+            let _ = store.purge(&e.sha256);
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn init_session(
