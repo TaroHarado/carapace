@@ -16,6 +16,7 @@ const useCase = document.getElementById("useCase");
 const registryRows = document.getElementById("registryRows");
 const quarantineRows = document.getElementById("quarantineRows");
 const clearQuarantineBtn = document.getElementById("clearQuarantineBtn");
+const defenseTimeline = document.getElementById("defenseTimeline");
 const judgeStatus = document.getElementById("judgeStatus");
 const historyTimeline = document.getElementById("historyTimeline");
 const sessionTask = document.getElementById("sessionTask");
@@ -180,6 +181,7 @@ refreshRegistry().catch(() => {});
 refreshHealth().catch(() => {});
 refreshHistory().catch(() => {});
 refreshQuarantine().catch(() => {});
+refreshDefenseTimeline().catch(() => {});
 
 function safeHost(url) {
   try {
@@ -342,6 +344,43 @@ async function refreshQuarantine() {
       });
       await refreshQuarantine();
     });
+  }
+}
+
+async function refreshDefenseTimeline() {
+  if (!defenseTimeline) return;
+  const res = await fetch("/api/defense-events");
+  if (!res.ok) throw new Error("defense-events unavailable");
+  const events = await res.json();
+  if (!Array.isArray(events) || events.length === 0) {
+    defenseTimeline.innerHTML = `
+      <div class="history-item">
+        <span>no defense events yet</span>
+        <strong>run the proxy</strong>
+      </div>
+    `;
+    return;
+  }
+
+  defenseTimeline.innerHTML = "";
+  for (const ev of events.slice(-10)) {
+    const row = document.createElement("div");
+    row.className = "history-item";
+    const chain = Array.isArray(ev.chain_hits) && ev.chain_hits.length > 0
+      ? ev.chain_hits.join(", ")
+      : "no chain";
+    const verdictClass = ev.decision === "block"
+      ? "danger-text"
+      : ev.decision === "quarantine" || ev.decision === "ask"
+        ? "warning-text"
+        : "safe-text";
+    row.innerHTML = `
+      <span>${ev.ts}</span>
+      <strong class="${verdictClass}">${ev.decision.toUpperCase()} · ${ev.asset_class} · ${ev.capability}</strong>
+      <div class="report-body">${ev.target}</div>
+      <div class="report-body">${chain}</div>
+    `;
+    defenseTimeline.appendChild(row);
   }
 }
 

@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
 use crate::deep_scan;
+use crate::defense_log;
 use crate::certify;
 use crate::enforcement;
 use crate::history;
@@ -153,6 +154,7 @@ fn router(state: Arc<AppState>) -> Router {
         .route("/api/verify", post(run_verify))
         .route("/api/registry", get(list_registry))
         .route("/api/history", post(list_history))
+        .route("/api/defense-events", get(list_defense_events))
         .route("/api/quarantine", get(list_quarantine))
         .route("/api/quarantine/release", post(release_quarantine))
         .route("/api/quarantine/purge", post(purge_quarantine))
@@ -277,6 +279,11 @@ async fn list_history(Json(req): Json<HistoryQuery>) -> Result<Json<Vec<history:
     }
     all.sort_by(|a, b| b.checked_at.cmp(&a.checked_at));
     Ok(Json(all))
+}
+
+async fn list_defense_events() -> Result<Json<Vec<defense_log::DefenseEvent>>, ApiError> {
+    let events = defense_log::load_recent(100).map_err(ApiError::from_anyhow)?;
+    Ok(Json(events))
 }
 
 async fn list_quarantine() -> Result<Json<Vec<quarantine::QuarantineEntry>>, ApiError> {

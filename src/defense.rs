@@ -296,7 +296,7 @@ impl DefenseEngine {
             egress_decision.as_ref(),
         );
 
-        DefenseReport {
+        let report = DefenseReport {
             decision,
             asset_class,
             capability,
@@ -305,7 +305,15 @@ impl DefenseEngine {
             matrix_decision,
             chain_hits,
             reasons,
+        };
+
+        // Best-effort append to local defense-events.jsonl for the web UI's
+        // live chain timeline. Errors do not propagate to the caller.
+        if let Ok(log) = crate::defense_log::DefenseLog::open_default() {
+            let _ = log.append(&report, &obs.primary_target);
         }
+
+        report
     }
 
     /// Snapshot of current chain hits without evaluating a new event.

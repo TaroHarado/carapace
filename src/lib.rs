@@ -11,6 +11,7 @@ pub mod asset;
 pub mod canary;
 pub mod capability_matrix;
 pub mod defense;
+pub mod defense_log;
 pub mod egress;
 pub mod fuzz;
 pub mod normalize;
