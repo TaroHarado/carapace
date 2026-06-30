@@ -620,6 +620,7 @@ async fn inspect_and_forward(
     let mut blocked_count = 0u32;
     let mut max_severity = 0u32;
     let mut matched_categories: Vec<String> = Vec::new();
+    let mut skip_current_tool = false;
 
     while let Some(ev) = events.next().await {
         match ev {
@@ -664,6 +665,7 @@ async fn inspect_and_forward(
                 tool_buf.clear();
                 tool_input.clear();
                 tool_name = name.clone();
+                skip_current_tool = false;
                 // MCP tool-call policy check — block before buffering.
                 if let Some(policy) = &ctx.mcp_policy {
                     if policy.evaluate(&tool_name).is_block() {
@@ -681,6 +683,7 @@ async fn inspect_and_forward(
                         ) {
                             let _ = tx.send(Ok(b)).await;
                         }
+                        skip_current_tool = true;
                         tool_index = tool_index.wrapping_add(1);
                         ctx.inspector.reset();
                         continue;
@@ -690,10 +693,21 @@ async fn inspect_and_forward(
                 ctx.inspector.reset();
             }
             Event::ToolUseDelta(s) => {
+                if skip_current_tool {
+                    continue;
+                }
                 tool_input.push_str(&s);
                 tool_buf.push(tool_delta_frame(&Event::ToolUseDelta(s.clone()), ctx.protocol.as_str(), tool_index));
             }
             Event::ToolUseEnd => {
+                if skip_current_tool {
+                    skip_current_tool = false;
+                    ctx.inspector.reset();
+                    tool_buf.clear();
+                    tool_input.clear();
+                    tool_name.clear();
+                    continue;
+                }
                 let verdict = ctx.inspector.feed(&Event::ToolUseEnd);
                 let mut effective_severity = verdict.severity;
                 let mut judge_escalated = false;

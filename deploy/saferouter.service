@@ -5,6 +5,7 @@ After=network.target
 [Service]
 User=__SERVICE_USER__
 WorkingDirectory=/opt/saferouter
+Environment=HOME=/var/lib/saferouter
 EnvironmentFile=-/etc/saferouter/saferouter.env
 ExecStart=/bin/sh -lc '/opt/saferouter/sr proxy --upstream "$UPSTREAM" --listen "$LISTEN" --mode "$MODE" --log "$LOG"'
 Restart=always
@@ -12,8 +13,8 @@ RestartSec=3
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=/var/log/saferouter /var/lib/saferouter
+ProtectHome=true
+ReadWritePaths=/var/log/saferouter /var/lib/saferouter /opt/saferouter
 
 [Install]
 WantedBy=multi-user.target

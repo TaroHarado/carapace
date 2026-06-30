@@ -253,6 +253,8 @@ Files added for production:
 - `deploy/saferouter.service` — `systemd` unit
 - `deploy/saferouter.env.example` — copied to `/etc/saferouter/saferouter.env` on first deploy
 
+The bundled `systemd` unit sets `HOME=/var/lib/saferouter` so SafeRouter's runtime stores (`quarantine`, `provenance`, `self-fuzz`, logs) stay writable under service hardening.
+
 After first deploy, edit the server env file and restart:
 
 ```bash
