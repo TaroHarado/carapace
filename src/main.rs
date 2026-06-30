@@ -87,6 +87,7 @@ let defense = std::sync::Arc::new(safeproxy::defense::DefenseEngine::with_defaul
                 defense: Some(defense),
                 quarantine,
             };
+            safeproxy::self_fuzz::spawn((*cfg.rules).clone());
             proxy::run(cfg).await
         }
         Commands::Scan { upstream, key } => {

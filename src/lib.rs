@@ -15,6 +15,7 @@ pub mod defense;
 pub mod defense_log;
 pub mod egress;
 pub mod fuzz;
+pub mod self_fuzz;
 pub mod normalize;
 pub mod provenance;
 pub mod quarantine;
