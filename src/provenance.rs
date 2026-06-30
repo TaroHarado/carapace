@@ -53,6 +53,7 @@ pub struct Provenance {
 pub struct ProvenanceStore {
     db: Db,
     artifacts: Tree,
+    baseline: Tree,
 }
 
 impl ProvenanceStore {
@@ -63,7 +64,8 @@ impl ProvenanceStore {
             .flush_every_ms(Some(500))
             .open()?;
         let artifacts = db.open_tree("artifacts")?;
-        Ok(Arc::new(Self { db, artifacts }))
+        let baseline = db.open_tree("baseline")?;
+        Ok(Arc::new(Self { db, artifacts, baseline }))
     }
 
     pub fn open_default() -> anyhow::Result<Arc<Self>> {
@@ -179,6 +181,59 @@ fn postcard_from<T: for<'de> Deserialize<'de>>(b: &[u8]) -> anyhow::Result<T> {
     Ok(serde_json::from_slice(b)?)
 }
 
+/// Persisted behavioral baseline (Layer 7). Serialized per-session and
+/// stored in the `baseline` sled tree. On the next proxy start, the
+/// session graph for the same session_id loads this entry and seeds
+/// its learning window's capabilities + asset classes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BaselinePersistEntry {
+    pub session_id: String,
+    pub capabilities: Vec<String>,
+    pub assets: Vec<String>,
+    pub finalized: bool,
+    pub first_seen_ts: u64,
+    pub last_seen_ts: u64,
+}
+
+impl ProvenanceStore {
+    /// Persist a session's baseline to sled. Keyed by `session_id`.
+    pub fn save_baseline(&self, session_id: &str, entry: &BaselinePersistEntry) -> anyhow::Result<()> {
+        let val = serde_json::to_vec(entry)?;
+        self.baseline.insert(session_id.as_bytes(), val)?;
+        Ok(())
+    }
+
+    /// Load a persisted baseline. Returns None if no saved baseline.
+    pub fn load_baseline(&self, session_id: &str) -> anyhow::Result<Option<BaselinePersistEntry>> {
+        match self.baseline.get(session_id.as_bytes())? {
+            Some(b) => Ok(Some(serde_json::from_slice(&b)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Garbage-collect baselines older than `max_age_secs`.
+    pub fn gc_baselines(&self, max_age_secs: u64) -> anyhow::Result<usize> {
+        let cutoff = now_ts().saturating_sub(max_age_secs);
+        let mut removed = 0usize;
+        for entry in self.baseline.iter() {
+            let (key, val) = entry?;
+            let parsed: BaselinePersistEntry = match serde_json::from_slice(&val) {
+                Ok(e) => e,
+                Err(_) => {
+                    let _ = self.baseline.remove(&key);
+                    removed += 1;
+                    continue;
+                }
+            };
+            if parsed.last_seen_ts < cutoff {
+                let _ = self.baseline.remove(&key);
+                removed += 1;
+            }
+        }
+        Ok(removed)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,10 +291,10 @@ mod tests {
         assert!(!store.any_tainted(&["missing".into()]).unwrap());
     }
 
-    #[test]
+#[test]
     fn manual_taint_escalation() {
         let store = ProvenanceStore::open(tmp()).unwrap();
-        // Source::LocalFile is trusted (not in the untrusted tier) вЂ” record
+        // Source::LocalFile is trusted (not in the untrusted tier) — record
         // as clean, then escalate manually.
         let _ = store.record("escalate", "maybe", Source::LocalFile, &[]).unwrap();
         assert!(!store.lookup("escalate").unwrap().unwrap().tainted);
@@ -247,5 +302,79 @@ mod tests {
         let p = store.lookup("escalate").unwrap().unwrap();
         assert!(p.tainted);
         assert_eq!(p.reason.as_deref(), Some("heuristic"));
+    }
+
+    #[test]
+    fn baseline_saves_and_loads() {
+        let store = ProvenanceStore::open(tmp()).unwrap();
+        let entry = BaselinePersistEntry {
+            session_id: "sess-1".to_string(),
+            capabilities: vec!["read:file".to_string(), "write:file".to_string()],
+            assets: vec!["project".to_string()],
+            finalized: true,
+            first_seen_ts: 1_000,
+            last_seen_ts: 2_000,
+        };
+        store.save_baseline("sess-1", &entry).unwrap();
+        let loaded = store.load_baseline("sess-1").unwrap().unwrap();
+        assert_eq!(loaded.session_id, "sess-1");
+        assert_eq!(loaded.capabilities.len(), 2);
+        assert!(loaded.capabilities.contains(&"read:file".to_string()));
+        assert!(loaded.finalized);
+    }
+
+    #[test]
+    fn baseline_load_returns_none_for_unknown_session() {
+        let store = ProvenanceStore::open(tmp()).unwrap();
+        assert!(store.load_baseline("never-seen").unwrap().is_none());
+    }
+
+    #[test]
+    fn baseline_endures_restart() {
+        let dir = tmp();
+        {
+            let store = ProvenanceStore::open(&dir).unwrap();
+            let entry = BaselinePersistEntry {
+                session_id: "sess-restart".to_string(),
+                capabilities: vec!["execute:shell".to_string()],
+                assets: vec!["executable".to_string()],
+                finalized: false,
+                first_seen_ts: 100,
+                last_seen_ts: 200,
+            };
+            store.save_baseline("sess-restart", &entry).unwrap();
+            store.flush().unwrap();
+        }
+        let store2 = ProvenanceStore::open(&dir).unwrap();
+        let loaded = store2.load_baseline("sess-restart").unwrap().unwrap();
+        assert_eq!(loaded.session_id, "sess-restart");
+        assert!(loaded.capabilities.contains(&"execute:shell".to_string()));
+    }
+
+    #[test]
+    fn gc_baselines_removes_old_entries() {
+        let store = ProvenanceStore::open(tmp()).unwrap();
+        let old = BaselinePersistEntry {
+            session_id: "old-sess".to_string(),
+            capabilities: vec![],
+            assets: vec![],
+            finalized: true,
+            first_seen_ts: 1,
+            last_seen_ts: 1,
+        };
+        let young = BaselinePersistEntry {
+            session_id: "young-sess".to_string(),
+            capabilities: vec![],
+            assets: vec![],
+            finalized: true,
+            first_seen_ts: now_ts() - 100,
+            last_seen_ts: now_ts(),
+        };
+        store.save_baseline("old-sess", &old).unwrap();
+        store.save_baseline("young-sess", &young).unwrap();
+        let removed = store.gc_baselines(1000).unwrap();
+        assert_eq!(removed, 1);
+        assert!(store.load_baseline("old-sess").unwrap().is_none());
+assert!(store.load_baseline("young-sess").unwrap().is_some());
     }
 }
