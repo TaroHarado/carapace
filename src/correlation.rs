@@ -171,12 +171,7 @@ impl CorrelationStore {
 }
 
 pub fn default_path() -> PathBuf {
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        return PathBuf::from(home)
-            .join(".saferouter")
-            .join("correlation.sled");
-    }
-    PathBuf::from("correlation.sled")
+    crate::paths::state_path("correlation.sled")
 }
 
 #[cfg(test)]

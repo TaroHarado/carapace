@@ -294,11 +294,7 @@ impl QuarantineStore {
 }
 
 fn default_root() -> PathBuf {
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        PathBuf::from(home).join(".saferouter").join("quarantine")
-    } else {
-        PathBuf::from(".saferouter").join("quarantine")
-    }
+    crate::paths::state_dir("quarantine")
 }
 
 fn extension_of(path: &str) -> String {

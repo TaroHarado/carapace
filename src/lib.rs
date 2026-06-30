@@ -35,6 +35,7 @@ pub mod mcp_policy;
 pub mod mockevil;
 pub mod monitor;
 pub mod policy;
+pub mod paths;
 pub mod probes;
 pub mod protocol;
 pub mod proxy;

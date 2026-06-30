@@ -26,15 +26,7 @@ pub struct HistoryEntry {
 }
 
 pub fn default_root() -> PathBuf {
-    if cfg!(target_os = "windows") {
-        if let Ok(home) = std::env::var("USERPROFILE") {
-            return PathBuf::from(home).join(".saferouter").join("history");
-        }
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".saferouter").join("history");
-    }
-    PathBuf::from("history")
+    crate::paths::state_dir("history")
 }
 
 pub fn host_path(root: &Path, host: &str) -> PathBuf {

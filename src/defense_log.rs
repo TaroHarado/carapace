@@ -74,10 +74,7 @@ impl DefenseLog {
 }
 
 pub fn default_path() -> PathBuf {
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        return PathBuf::from(home).join(".saferouter").join("defense-events.jsonl");
-    }
-    PathBuf::from("defense-events.jsonl")
+    crate::paths::state_path("defense-events.jsonl")
 }
 
 pub fn load_recent(limit: usize) -> anyhow::Result<Vec<DefenseEvent>> {
@@ -104,6 +101,12 @@ mod tests {
     use crate::capability_matrix::MatrixDecision;
     use crate::defense::{DefenseDecision, DefenseReport};
     use crate::session_graph::ChainHit;
+    use std::sync::{Mutex as StdMutex, OnceLock};
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<StdMutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| StdMutex::new(())).lock().unwrap()
+    }
 
     fn dummy_report() -> DefenseReport {
         DefenseReport {
@@ -152,13 +155,16 @@ mod tests {
 
     #[test]
     fn load_recent_returns_empty_when_missing() {
+        let _guard = env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        std::env::set_var("HOME", temp.path());
+        std::env::remove_var("USERPROFILE");
         let p = default_path();
-        // Can't force HOME in unit test portably; just ensure function
-        // handles missing file gracefully.
         if p.exists() {
             let _ = std::fs::remove_file(&p);
         }
         let out = load_recent(10).unwrap();
+        std::env::remove_var("HOME");
         assert!(out.is_empty());
     }
 }

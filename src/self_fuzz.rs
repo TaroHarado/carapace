@@ -44,12 +44,7 @@ fn now_rfc3339() -> String {
 }
 
 fn regressions_path() -> PathBuf {
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        return PathBuf::from(home)
-            .join(".saferouter")
-            .join("self-fuzz-regressions.jsonl");
-    }
-    PathBuf::from("self-fuzz-regressions.jsonl")
+    crate::paths::state_path("self-fuzz-regressions.jsonl")
 }
 
 fn append_regression(reg: &FuzzRegression) -> std::io::Result<()> {

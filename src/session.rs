@@ -71,15 +71,7 @@ pub struct DecisionRecord {
 }
 
 pub fn default_root() -> PathBuf {
-    if cfg!(target_os = "windows") {
-        if let Ok(home) = std::env::var("USERPROFILE") {
-            return PathBuf::from(home).join(".saferouter").join("sessions");
-        }
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".saferouter").join("sessions");
-    }
-    PathBuf::from("sessions")
+    crate::paths::state_dir("sessions")
 }
 
 pub fn new(task: &str) -> SessionState {

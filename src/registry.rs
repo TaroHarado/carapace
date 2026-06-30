@@ -157,15 +157,7 @@ impl RegistryFeed {
 }
 
 pub fn default_registry_path() -> PathBuf {
-    if cfg!(target_os = "windows") {
-        if let Ok(home) = std::env::var("USERPROFILE") {
-            return PathBuf::from(home).join(".saferouter").join("registry.json");
-        }
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".saferouter").join("registry.json");
-    }
-    PathBuf::from("registry.json")
+    crate::paths::state_path("registry.json")
 }
 
 #[cfg(test)]

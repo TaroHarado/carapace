@@ -184,11 +184,7 @@ impl ProvenanceStore {
 }
 
 fn default_path() -> PathBuf {
-    if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
-        PathBuf::from(home).join(".saferouter").join("provenance.sled")
-    } else {
-        PathBuf::from(".saferouter").join("provenance.sled")
-    }
+    crate::paths::state_path("provenance.sled")
 }
 
 fn now_ts() -> u64 {
