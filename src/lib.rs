@@ -31,6 +31,7 @@ pub mod identity;
 pub mod inspect;
 pub mod judge;
 pub mod mcp;
+pub mod tool_policy;
 pub mod mcp_policy;
 pub mod mockevil;
 pub mod monitor;

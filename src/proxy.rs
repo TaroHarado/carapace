@@ -30,7 +30,7 @@ use crate::cli::Mode;
 use crate::defense::{DefenseDecision, DefenseEngine, ToolUseObservation};
 use crate::inspect::{Inspector, Rules};
 use crate::judge::{self, JudgeConfig};
-use crate::mcp_policy::McpPolicy;
+use crate::tool_policy::McpPolicy;
 use crate::protocol::anthropic;
 use crate::protocol::{self, Event};
 use crate::quarantine::QuarantineStore;
@@ -1043,7 +1043,7 @@ impl http_body::Body for ReceiveStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mcp_policy::{McpPolicy, McpPolicyMode};
+    use crate::tool_policy::{McpPolicy, McpPolicyMode};
     use async_stream::stream;
 
     #[tokio::test]
